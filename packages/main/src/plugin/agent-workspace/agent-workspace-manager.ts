@@ -16,17 +16,19 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
+import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import type { Disposable, FileSystemWatcher, RunError } from '@openkaiden/api';
+import type { WebContents } from 'electron';
 import { inject, injectable, preDestroy } from 'inversify';
 
-import { IPCHandle } from '/@/plugin/api.js';
 import { CliToolRegistry } from '/@/plugin/cli-tool-registry.js';
 import { FilesystemMonitoring } from '/@/plugin/filesystem-monitoring.js';
 import { TaskManager } from '/@/plugin/tasks/task-manager.js';
+import { IPCHandle, WebContentsType } from '/@/plugin/api.js';
 import { Exec } from '/@/plugin/util/exec.js';
 import type {
   AgentWorkspaceConfiguration,
@@ -42,6 +44,11 @@ import { ApiSenderType } from '/@api/api-sender/api-sender-type.js';
 @injectable()
 export class AgentWorkspaceManager implements Disposable {
   private instancesWatcher: FileSystemWatcher | undefined;
+  private readonly terminalCallbacks = new Map<
+    number,
+    { write: (param: string) => void; resize: (w: number, h: number) => void }
+  >();
+  private readonly terminalProcesses = new Map<number, ChildProcessWithoutNullStreams>();
 
   constructor(
     @inject(ApiSenderType)
@@ -56,6 +63,8 @@ export class AgentWorkspaceManager implements Disposable {
     private readonly taskManager: TaskManager,
     @inject(FilesystemMonitoring)
     private readonly filesystemMonitoring: FilesystemMonitoring,
+    @inject(WebContentsType)
+    private readonly webContents: WebContents,
   ) {}
 
   private getCliPath(): string {
@@ -176,6 +185,53 @@ export class AgentWorkspaceManager implements Disposable {
     return result;
   }
 
+  shellInAgentWorkspace(
+    id: string,
+    onData: (data: string) => void,
+    onError: (error: string) => void,
+    onEnd: () => void,
+  ): {
+    write: (param: string) => void;
+    resize: (w: number, h: number) => void;
+    process: ChildProcessWithoutNullStreams;
+  } {
+    // eslint-disable-next-line sonarjs/no-os-command-from-path
+    const childProcess = spawn('kdn-cli', [
+      'terminal',
+      id,
+      '--',
+      '/bin/sh',
+      '-c',
+      'if command -v bash >/dev/null 2>&1; then bash; else sh; fi',
+    ]);
+
+    childProcess.stdout.on('data', (chunk: Buffer) => {
+      onData(chunk.toString('utf-8'));
+    });
+
+    childProcess.stderr.on('data', (chunk: Buffer) => {
+      onData(chunk.toString('utf-8'));
+    });
+
+    childProcess.on('error', (error: Error) => {
+      onError(error.message);
+    });
+
+    childProcess.on('close', () => {
+      onEnd();
+    });
+
+    return {
+      write: (param: string): void => {
+        childProcess.stdin.write(param);
+      },
+      resize: (_w: number, _h: number): void => {
+        // no-op: resize requires a PTY (e.g. node-pty); can be added later
+      },
+      process: childProcess,
+    };
+  }
+
   init(): void {
     this.ipcHandle(
       'agent-workspace:create',
@@ -207,6 +263,49 @@ export class AgentWorkspaceManager implements Disposable {
       return this.stop(id);
     });
 
+    this.ipcHandle(
+      'agent-workspace:terminal',
+      async (_listener: unknown, id: string, onDataId: number): Promise<number> => {
+        const invocation = this.shellInAgentWorkspace(
+          id,
+          (content: string) => {
+            this.webContents.send('agent-workspace:terminal-onData', onDataId, content);
+          },
+          (error: string) => {
+            this.webContents.send('agent-workspace:terminal-onError', onDataId, error);
+          },
+          () => {
+            this.webContents.send('agent-workspace:terminal-onEnd', onDataId);
+            this.terminalCallbacks.delete(onDataId);
+            this.terminalProcesses.delete(onDataId);
+          },
+        );
+        this.terminalCallbacks.set(onDataId, { write: invocation.write, resize: invocation.resize });
+        this.terminalProcesses.set(onDataId, invocation.process);
+        return onDataId;
+      },
+    );
+
+    this.ipcHandle(
+      'agent-workspace:terminalSend',
+      async (_listener: unknown, onDataId: number, content: string): Promise<void> => {
+        const callback = this.terminalCallbacks.get(onDataId);
+        if (callback) {
+          callback.write(content);
+        }
+      },
+    );
+
+    this.ipcHandle(
+      'agent-workspace:terminalResize',
+      async (_listener: unknown, onDataId: number, width: number, height: number): Promise<void> => {
+        const callback = this.terminalCallbacks.get(onDataId);
+        if (callback) {
+          callback.resize(width, height);
+        }
+      },
+    );
+    
     this.watchInstancesFile();
   }
 
@@ -225,5 +324,12 @@ export class AgentWorkspaceManager implements Disposable {
   @preDestroy()
   dispose(): void {
     this.instancesWatcher?.dispose();
+    for (const proc of this.terminalProcesses.values()) {
+      if (!proc.killed) {
+        proc.kill();
+      }
+    }
+    this.terminalProcesses.clear();
+    this.terminalCallbacks.clear();
   }
 }

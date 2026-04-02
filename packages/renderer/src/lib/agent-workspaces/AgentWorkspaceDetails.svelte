@@ -9,7 +9,8 @@ import DetailsPage from '/@/lib/ui/DetailsPage.svelte';
 import ListItemButtonIcon from '/@/lib/ui/ListItemButtonIcon.svelte';
 import { getTabUrl, isTabSelected } from '/@/lib/ui/Util';
 import Route from '/@/Route.svelte';
-import { agentWorkspaces, startAgentWorkspace, stopAgentWorkspace } from '/@/stores/agent-workspaces.svelte';
+import {agentWorkspaces, startAgentWorkspace, stopAgentWorkspace} from '/@/stores/agent-workspaces.svelte';
+import AgentWorkspaceTerminal from '/@/lib/agent-workspaces/AgentWorkspaceTerminal.svelte';
 
 interface Props {
   workspaceId: string;
@@ -91,6 +92,7 @@ function handleRemove(): void {
   {/snippet}
   {#snippet tabsSnippet()}
     <Tab title="Summary" selected={isTabSelected($router.path, 'summary')} url={getTabUrl($router.path, 'summary')} />
+    <Tab title="Terminal" selected={isTabSelected($router.path, 'terminal')} url={getTabUrl($router.path, 'terminal')} />
   {/snippet}
   {#snippet contentSnippet()}
     <Route path="/summary" breadcrumb="Summary" navigationHint="tab">
@@ -98,6 +100,9 @@ function handleRemove(): void {
         <ErrorMessage error={configurationError} />
       {/if}
       <AgentWorkspaceDetailsSummary {workspaceSummary} {configuration} />
+    </Route>
+    <Route path="/terminal" breadcrumb="Terminal" navigationHint="tab">
+      <AgentWorkspaceTerminal workspaceId={workspaceId} />
     </Route>
   {/snippet}
 </DetailsPage>
