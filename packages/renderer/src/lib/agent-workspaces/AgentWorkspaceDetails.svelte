@@ -12,7 +12,8 @@ import DetailsPage from '/@/lib/ui/DetailsPage.svelte';
 import ListItemButtonIcon from '/@/lib/ui/ListItemButtonIcon.svelte';
 import { getTabUrl, isTabSelected } from '/@/lib/ui/Util';
 import Route from '/@/Route.svelte';
-import { agentWorkspaces, startAgentWorkspace, stopAgentWorkspace } from '/@/stores/agent-workspaces.svelte';
+import {agentWorkspaces, startAgentWorkspace, stopAgentWorkspace} from '/@/stores/agent-workspaces.svelte';
+import AgentWorkspaceTerminal from '/@/lib/agent-workspaces/AgentWorkspaceTerminal.svelte';
 
 interface Props {
   workspaceId: string;
@@ -113,6 +114,9 @@ function handleRemove(): void {
     </Route>
     <Route path="/settings" breadcrumb="Settings" navigationHint="tab">
       <AgentWorkspaceDetailsSettings />
+    </Route>
+    <Route path="/terminal" breadcrumb="Terminal" navigationHint="tab">
+      <AgentWorkspaceTerminal workspaceId={workspaceId} />
     </Route>
   {/snippet}
 </DetailsPage>

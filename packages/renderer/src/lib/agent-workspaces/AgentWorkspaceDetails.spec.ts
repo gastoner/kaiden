@@ -90,7 +90,15 @@ test('Expect Overview tab is present', async () => {
   });
 });
 
-test('Expect workspace overview with project is resolved from the store', () => {
+test('Expect Terminal tab is present', async () => {
+  render(AgentWorkspaceDetails, { workspaceId: 'ws-1' });
+
+  await waitFor(() => {
+    expect(screen.getByText('Terminal')).toBeInTheDocument();
+  });
+});
+
+test('Expect workspace summary with project is resolved from the store', () => {
   render(AgentWorkspaceDetails, { workspaceId: 'ws-1' });
 
   const storeValue = [workspaceSummary];
