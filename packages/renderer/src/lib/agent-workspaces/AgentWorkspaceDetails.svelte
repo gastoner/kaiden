@@ -13,7 +13,6 @@ import ListItemButtonIcon from '/@/lib/ui/ListItemButtonIcon.svelte';
 import { getTabUrl, isTabSelected } from '/@/lib/ui/Util';
 import Route from '/@/Route.svelte';
 import {agentWorkspaces, startAgentWorkspace, stopAgentWorkspace} from '/@/stores/agent-workspaces.svelte';
-import AgentWorkspaceTerminal from '/@/lib/agent-workspaces/AgentWorkspaceTerminal.svelte';
 
 interface Props {
   workspaceId: string;
