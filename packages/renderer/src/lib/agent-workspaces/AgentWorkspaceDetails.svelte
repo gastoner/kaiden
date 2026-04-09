@@ -4,13 +4,13 @@ import { ErrorMessage, Tab } from '@podman-desktop/ui-svelte';
 import { router } from 'tinro';
 
 import AgentWorkspaceDetailsSummary from '/@/lib/agent-workspaces/AgentWorkspaceDetailsSummary.svelte';
+import AgentWorkspaceTerminal from '/@/lib/agent-workspaces/AgentWorkspaceTerminal.svelte';
 import { withConfirmation } from '/@/lib/dialogs/messagebox-utils';
 import DetailsPage from '/@/lib/ui/DetailsPage.svelte';
 import ListItemButtonIcon from '/@/lib/ui/ListItemButtonIcon.svelte';
 import { getTabUrl, isTabSelected } from '/@/lib/ui/Util';
 import Route from '/@/Route.svelte';
 import {agentWorkspaces, startAgentWorkspace, stopAgentWorkspace} from '/@/stores/agent-workspaces.svelte';
-import AgentWorkspaceTerminal from '/@/lib/agent-workspaces/AgentWorkspaceTerminal.svelte';
 
 interface Props {
   workspaceId: string;
