@@ -186,7 +186,7 @@ export class AgentWorkspaceManager implements Disposable {
   }
 
   shellInAgentWorkspace(
-    id: string,
+    name: string,
     onData: (data: string) => void,
     onError: (error: string) => void,
     onEnd: () => void,
@@ -196,7 +196,7 @@ export class AgentWorkspaceManager implements Disposable {
     process: ChildProcessWithoutNullStreams;
   } {
     // eslint-disable-next-line sonarjs/no-os-command-from-path
-    const childProcess = spawn('kortex-cli', ['terminal', id]);
+    const childProcess = spawn('kdn', ['terminal', name]);
 
     childProcess.stdout.on('data', (chunk: Buffer) => {
       onData(chunk.toString('utf-8'));
@@ -259,8 +259,13 @@ export class AgentWorkspaceManager implements Disposable {
     this.ipcHandle(
       'agent-workspace:terminal',
       async (_listener: unknown, id: string, onDataId: number): Promise<number> => {
+        const workspaces = await this.list();
+        const workspace = workspaces.find(ws => ws.id === id);
+        if (!workspace) {
+          throw new Error(`workspace "${id}" not found. Use "workspace list" to see available workspaces.`);
+        }
         const invocation = this.shellInAgentWorkspace(
-          id,
+          workspace.name,
           (content: string) => {
             this.webContents.send('agent-workspace:terminal-onData', onDataId, content);
           },
