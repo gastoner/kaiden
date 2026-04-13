@@ -1,5 +1,5 @@
 <script lang="ts">
-import { faPlay, faStop, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faPlay, faStop, faTerminal, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { ErrorMessage, Tab } from '@podman-desktop/ui-svelte';
 import { router } from 'tinro';
 
@@ -63,6 +63,13 @@ async function handleStartStop(): Promise<void> {
   }
 }
 
+function handleTerminal(): void {
+  if (!isRunning && !inProgress) {
+    startAgentWorkspace(workspaceId).catch(console.error);
+  }
+  router.goto(`/agent-workspaces/${encodeURIComponent(workspaceId)}/terminal`);
+}
+
 function handleRemove(): void {
   withConfirmation(
     async () => {
@@ -85,6 +92,10 @@ function handleRemove(): void {
       onClick={handleStartStop}
       icon={isRunning ? faStop : faPlay}
       inProgress={inProgress} />
+    <ListItemButtonIcon
+      title="Open Terminal"
+      onClick={handleTerminal}
+      icon={faTerminal} />
     <ListItemButtonIcon
       title="Remove Workspace"
       onClick={handleRemove}

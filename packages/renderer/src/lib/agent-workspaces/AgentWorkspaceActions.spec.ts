@@ -160,6 +160,43 @@ test('Expect error dialog uses workspace name when start fails', async () => {
   });
 });
 
+test('Expect terminal button is rendered', () => {
+  render(AgentWorkspaceCard, { workspace });
+
+  expect(screen.getByRole('button', { name: 'Open terminal for workspace api-refactor' })).toBeInTheDocument();
+});
+
+test('Expect clicking terminal button navigates to terminal tab', async () => {
+  render(AgentWorkspaceCard, { workspace });
+
+  const terminalButton = screen.getByRole('button', { name: 'Open terminal for workspace api-refactor' });
+  await fireEvent.click(terminalButton);
+
+  expect(router.goto).toHaveBeenCalledWith('/agent-workspaces/ws-1/terminal');
+});
+
+test('Expect clicking terminal button starts workspace when stopped', async () => {
+  render(AgentWorkspaceCard, { workspace });
+
+  const terminalButton = screen.getByRole('button', { name: 'Open terminal for workspace api-refactor' });
+  await fireEvent.click(terminalButton);
+
+  expect(window.startAgentWorkspace).toHaveBeenCalledWith('ws-1');
+  expect(router.goto).toHaveBeenCalledWith('/agent-workspaces/ws-1/terminal');
+});
+
+test('Expect clicking terminal button does not start workspace when already running', async () => {
+  agentWorkspaceStatuses.set('ws-1', 'running');
+
+  render(AgentWorkspaceCard, { workspace });
+
+  const terminalButton = screen.getByRole('button', { name: 'Open terminal for workspace api-refactor' });
+  await fireEvent.click(terminalButton);
+
+  expect(window.startAgentWorkspace).not.toHaveBeenCalled();
+  expect(router.goto).toHaveBeenCalledWith('/agent-workspaces/ws-1/terminal');
+});
+
 test('Expect error dialog shown when stop fails', async () => {
   vi.mocked(window.stopAgentWorkspace).mockRejectedValue(new Error('stop timeout'));
 
