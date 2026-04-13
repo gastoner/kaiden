@@ -25,10 +25,10 @@ import type { Disposable, FileSystemWatcher } from '@openkaiden/api';
 import type { WebContents } from 'electron';
 import { inject, injectable, preDestroy } from 'inversify';
 
+import { IPCHandle, WebContentsType } from '/@/plugin/api.js';
 import { FilesystemMonitoring } from '/@/plugin/filesystem-monitoring.js';
 import { KdnCli } from '/@/plugin/kdn-cli/kdn-cli.js';
 import { TaskManager } from '/@/plugin/tasks/task-manager.js';
-import { IPCHandle, WebContentsType } from '/@/plugin/api.js';
 import type {
   AgentWorkspaceConfiguration,
   AgentWorkspaceCreateOptions,
