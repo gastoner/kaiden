@@ -4,6 +4,7 @@ import '@xterm/xterm/css/xterm.css';
 import { EmptyScreen } from '@podman-desktop/ui-svelte';
 import { FitAddon } from '@xterm/addon-fit';
 import { SerializeAddon } from '@xterm/addon-serialize';
+import type { IDisposable } from '@xterm/xterm';
 import { Terminal } from '@xterm/xterm';
 import { onDestroy, onMount } from 'svelte';
 import { router } from 'tinro';
@@ -26,18 +27,59 @@ let shellTerminal: Terminal;
 let currentRouterPath: string;
 let sendCallbackId: number | undefined;
 let serializeAddon: SerializeAddon;
-let inputDisposable: { dispose: () => void } | undefined;
 let handleResize: (() => void) | undefined;
+let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+let onDataDisposable: IDisposable | undefined;
+let reconnecting = false;
 
 const status: AgentWorkspaceStatus = $derived(agentWorkspaceStatuses.get(workspaceId) ?? 'stopped');
 const isRunning = $derived(status === 'running');
-let lastStatus = $state<AgentWorkspaceStatus>('stopped');
+let lastStatus = $state('');
+
+function registerInputHandler(callbackId: number): void {
+  onDataDisposable?.dispose();
+  onDataDisposable = shellTerminal?.onData(data => {
+    window.shellInAgentWorkspaceSend(callbackId, data).catch((error: unknown) => console.log(String(error)));
+  });
+}
+
+function clearReconnectTimer(): void {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
+  }
+}
+
+function scheduleReconnect(): void {
+  if (reconnectTimer) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = undefined;
+    if (isRunning) {
+      restartTerminal().catch((err: unknown) => {
+        console.error(`Error reopening terminal for workspace ${workspaceId}`, err);
+        scheduleReconnect();
+      });
+    }
+  }, 2000);
+}
+
+async function restartTerminal(): Promise<void> {
+  if (reconnecting) return;
+  reconnecting = true;
+  try {
+    clearReconnectTimer();
+    await executeShellInWorkspace();
+  } finally {
+    reconnecting = false;
+  }
+}
 
 $effect(() => {
-  if (lastStatus === 'starting' && status === 'running') {
-    executeShellInWorkspace().catch((err: unknown) =>
-      console.error(`Error starting terminal for workspace ${workspaceId}`, err),
-    );
+  if (lastStatus !== '' && lastStatus !== 'running' && status === 'running') {
+    restartTerminal().catch((err: unknown) => {
+      console.error(`Error starting terminal for workspace ${workspaceId}`, err);
+      scheduleReconnect();
+    });
   }
   lastStatus = status;
 });
@@ -53,17 +95,20 @@ function createDataCallback(): (data: string) => void {
 }
 
 function receiveEndCallback(): void {
-  if (sendCallbackId && isRunning) {
-    window
-      .shellInAgentWorkspace(workspaceId, createDataCallback(), () => {}, receiveEndCallback)
-      .then(id => {
-        sendCallbackId = id;
-        inputDisposable?.dispose();
-        inputDisposable = shellTerminal?.onData(async data => {
-          await window.shellInAgentWorkspaceSend(id, data);
-        });
-      })
-      .catch((err: unknown) => console.error(`Error reopening terminal for workspace ${workspaceId}`, err));
+  if (!sendCallbackId) return;
+
+  if (reconnecting) {
+    scheduleReconnect();
+    return;
+  }
+
+  if (isRunning) {
+    restartTerminal().catch((err: unknown) => {
+      console.error(`Error reopening terminal for workspace ${workspaceId}`, err);
+      scheduleReconnect();
+    });
+  } else {
+    scheduleReconnect();
   }
 }
 
@@ -78,10 +123,7 @@ async function executeShellInWorkspace(): Promise<void> {
     receiveEndCallback,
   );
   await window.shellInAgentWorkspaceResize(callbackId, shellTerminal.cols, shellTerminal.rows);
-  inputDisposable?.dispose();
-  inputDisposable = shellTerminal?.onData(data => {
-    window.shellInAgentWorkspaceSend(callbackId, data).catch((error: unknown) => console.log(String(error)));
-  });
+  registerInputHandler(callbackId);
   sendCallbackId = callbackId;
 }
 
@@ -142,10 +184,11 @@ onMount(async () => {
 });
 
 onDestroy(() => {
+  clearReconnectTimer();
   if (handleResize) {
     window.removeEventListener('resize', handleResize);
   }
-  inputDisposable?.dispose();
+  onDataDisposable?.dispose();
   const terminalContent = serializeAddon?.serialize() ?? '';
   registerTerminal({
     workspaceId,
