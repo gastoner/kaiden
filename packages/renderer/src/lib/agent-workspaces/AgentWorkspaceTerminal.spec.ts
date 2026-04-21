@@ -19,6 +19,7 @@
 import '@testing-library/jest-dom/vitest';
 
 import { render, screen, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { get, writable } from 'svelte/store';
 import { router } from 'tinro';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -128,4 +129,246 @@ test('serializes terminal buffer to store on unmount', async () => {
   const terminals = get(agentWorkspaceTerminals);
   expect(terminals).toHaveLength(1);
   expect(terminals[0]?.workspaceId).toBe('ws-1');
+});
+
+test('receiveEndCallback reconnects when shell ends while workspace is running', async () => {
+  agentWorkspaceStatuses.set('ws-1', 'running');
+
+  let onEndCallback: () => void = () => {};
+  const sendCallbackId = 42;
+  shellInAgentWorkspaceMock.mockImplementation(
+    async (_id: string, _onData: (data: string) => void, _onError: (error: string) => void, onEnd: () => void) => {
+      onEndCallback = onEnd;
+      return sendCallbackId;
+    },
+  );
+
+  render(AgentWorkspaceTerminal, { workspaceId: 'ws-1', screenReaderMode: true });
+  await waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(1));
+
+  onEndCallback();
+  await waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(2));
+
+  expect(window.shellInAgentWorkspaceResize).toHaveBeenCalledTimes(2);
+});
+
+test('receiveEndCallback schedules reconnect when workspace is not running', async () => {
+  agentWorkspaceStatuses.set('ws-1', 'running');
+
+  let onEndCallback: () => void = () => {};
+  const sendCallbackId = 42;
+  shellInAgentWorkspaceMock.mockImplementation(
+    async (_id: string, _onData: (data: string) => void, _onError: (error: string) => void, onEnd: () => void) => {
+      onEndCallback = onEnd;
+      return sendCallbackId;
+    },
+  );
+
+  render(AgentWorkspaceTerminal, { workspaceId: 'ws-1', screenReaderMode: true });
+  await waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(1));
+
+  agentWorkspaceStatuses.set('ws-1', 'stopped');
+  await tick();
+  onEndCallback();
+
+  expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(1);
+
+  agentWorkspaceStatuses.set('ws-1', 'running');
+  await waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(2));
+});
+
+test('terminal reconnects via scheduleReconnect when immediate reconnect fails', async () => {
+  vi.useFakeTimers();
+  agentWorkspaceStatuses.set('ws-1', 'running');
+
+  let onEndCallback: () => void = () => {};
+  const sendCallbackId = 42;
+  shellInAgentWorkspaceMock.mockImplementation(
+    async (_id: string, _onData: (data: string) => void, _onError: (error: string) => void, onEnd: () => void) => {
+      onEndCallback = onEnd;
+      return sendCallbackId;
+    },
+  );
+
+  const renderObject = render(AgentWorkspaceTerminal, { workspaceId: 'ws-1', screenReaderMode: true });
+  await vi.waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(1));
+
+  shellInAgentWorkspaceMock.mockRejectedValueOnce(new Error('workspace is restarting'));
+
+  onEndCallback();
+  await vi.waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(2));
+
+  shellInAgentWorkspaceMock.mockImplementation(
+    async (_id: string, _onData: (data: string) => void, _onError: (error: string) => void, onEnd: () => void) => {
+      onEndCallback = onEnd;
+      return sendCallbackId;
+    },
+  );
+
+  await vi.advanceTimersByTimeAsync(2000);
+  await vi.waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(3));
+
+  renderObject.unmount();
+  vi.useRealTimers();
+});
+
+test('scheduleReconnect retries when restartTerminal fails inside the timer callback', async () => {
+  vi.useFakeTimers();
+  agentWorkspaceStatuses.set('ws-1', 'running');
+
+  let onEndCallback: () => void = () => {};
+  const sendCallbackId = 42;
+  shellInAgentWorkspaceMock.mockImplementation(
+    async (_id: string, _onData: (data: string) => void, _onError: (error: string) => void, onEnd: () => void) => {
+      onEndCallback = onEnd;
+      return sendCallbackId;
+    },
+  );
+
+  const renderObject = render(AgentWorkspaceTerminal, { workspaceId: 'ws-1', screenReaderMode: true });
+  await vi.waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(1));
+
+  shellInAgentWorkspaceMock.mockRejectedValueOnce(new Error('first failure'));
+  shellInAgentWorkspaceMock.mockRejectedValueOnce(new Error('second failure'));
+
+  onEndCallback();
+  await vi.waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(2));
+
+  await vi.advanceTimersByTimeAsync(2000);
+  await vi.waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(3));
+
+  shellInAgentWorkspaceMock.mockImplementation(
+    async (_id: string, _onData: (data: string) => void, _onError: (error: string) => void, onEnd: () => void) => {
+      onEndCallback = onEnd;
+      return sendCallbackId;
+    },
+  );
+
+  await vi.advanceTimersByTimeAsync(2000);
+  await vi.waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(4));
+
+  renderObject.unmount();
+  vi.useRealTimers();
+});
+
+test('concurrent receiveEndCallback calls do not create duplicate connections', async () => {
+  vi.useFakeTimers();
+  agentWorkspaceStatuses.set('ws-1', 'running');
+
+  let onEndCallback: () => void = () => {};
+  let resolveShell: ((id: number) => void) | undefined;
+  const sendCallbackId = 42;
+
+  shellInAgentWorkspaceMock.mockImplementation(
+    async (_id: string, _onData: (data: string) => void, _onError: (error: string) => void, onEnd: () => void) => {
+      onEndCallback = onEnd;
+      return sendCallbackId;
+    },
+  );
+
+  const renderObject = render(AgentWorkspaceTerminal, { workspaceId: 'ws-1', screenReaderMode: true });
+  await vi.waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(1));
+
+  shellInAgentWorkspaceMock.mockImplementation(
+    () =>
+      new Promise<number>(resolve => {
+        resolveShell = resolve;
+      }),
+  );
+
+  onEndCallback();
+  onEndCallback();
+
+  resolveShell?.(sendCallbackId);
+  await vi.waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(2));
+
+  expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(2);
+
+  shellInAgentWorkspaceMock.mockImplementation(
+    async (_id: string, _onData: (data: string) => void, _onError: (error: string) => void, onEnd: () => void) => {
+      onEndCallback = onEnd;
+      return sendCallbackId;
+    },
+  );
+
+  await vi.advanceTimersByTimeAsync(2000);
+  await vi.waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(3));
+
+  renderObject.unmount();
+  vi.useRealTimers();
+});
+
+test('receiveEndCallback during reconnect schedules safety-net retry to prevent freeze', async () => {
+  vi.useFakeTimers();
+  agentWorkspaceStatuses.set('ws-1', 'running');
+
+  let onEndCallback: () => void = () => {};
+  let resolveShell: ((id: number) => void) | undefined;
+  const sendCallbackId = 42;
+
+  shellInAgentWorkspaceMock.mockImplementation(
+    async (_id: string, _onData: (data: string) => void, _onError: (error: string) => void, onEnd: () => void) => {
+      onEndCallback = onEnd;
+      return sendCallbackId;
+    },
+  );
+
+  const renderObject = render(AgentWorkspaceTerminal, { workspaceId: 'ws-1', screenReaderMode: true });
+  await vi.waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(1));
+
+  shellInAgentWorkspaceMock.mockImplementation(
+    () =>
+      new Promise<number>(resolve => {
+        resolveShell = resolve;
+      }),
+  );
+
+  onEndCallback();
+  onEndCallback();
+
+  resolveShell?.(sendCallbackId);
+  await vi.waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(2));
+
+  shellInAgentWorkspaceMock.mockImplementation(
+    async (_id: string, _onData: (data: string) => void, _onError: (error: string) => void, onEnd: () => void) => {
+      onEndCallback = onEnd;
+      return sendCallbackId;
+    },
+  );
+
+  await vi.advanceTimersByTimeAsync(2000);
+  await vi.waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(3));
+
+  renderObject.unmount();
+  vi.useRealTimers();
+});
+
+test('$effect schedules reconnect when restartTerminal fails', async () => {
+  agentWorkspaceStatuses.set('ws-1', 'running');
+
+  const sendCallbackId = 42;
+  shellInAgentWorkspaceMock.mockImplementation(
+    async (_id: string, _onData: (data: string) => void, _onError: (error: string) => void, _onEnd: () => void) => {
+      return sendCallbackId;
+    },
+  );
+
+  render(AgentWorkspaceTerminal, { workspaceId: 'ws-1', screenReaderMode: true });
+  await waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(1));
+
+  agentWorkspaceStatuses.set('ws-1', 'stopped');
+  await tick();
+
+  shellInAgentWorkspaceMock.mockRejectedValueOnce(new Error('not ready yet'));
+  agentWorkspaceStatuses.set('ws-1', 'running');
+
+  await waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(2));
+
+  shellInAgentWorkspaceMock.mockImplementation(
+    async (_id: string, _onData: (data: string) => void, _onError: (error: string) => void, _onEnd: () => void) => {
+      return sendCallbackId;
+    },
+  );
+
+  await waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(3), { timeout: 5000 });
 });
