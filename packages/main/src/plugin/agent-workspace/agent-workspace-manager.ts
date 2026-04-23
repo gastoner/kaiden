@@ -250,7 +250,7 @@ export class AgentWorkspaceManager implements Disposable {
         }
       },
     );
-    
+
     this.watchInstancesFile();
   }
 

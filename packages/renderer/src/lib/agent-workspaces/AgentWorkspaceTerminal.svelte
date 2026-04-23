@@ -12,8 +12,7 @@ import { router } from 'tinro';
 import { getTerminalTheme } from '/@/lib/terminal/terminal-theme';
 import NoLogIcon from '/@/lib/ui/NoLogIcon.svelte';
 import { getExistingTerminal, registerTerminal } from '/@/stores/agent-workspace-terminal-store';
-import type { AgentWorkspaceStatus } from '/@/stores/agent-workspaces.svelte';
-import { agentWorkspaceStatuses } from '/@/stores/agent-workspaces.svelte';
+import { agentWorkspaces } from '/@/stores/agent-workspaces.svelte';
 import { TerminalSettings } from '/@api/terminal/terminal-settings';
 
 interface Props {
@@ -32,7 +31,8 @@ let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 let onDataDisposable: IDisposable | undefined;
 let reconnecting = false;
 
-const status: AgentWorkspaceStatus = $derived(agentWorkspaceStatuses.get(workspaceId) ?? 'stopped');
+const workspaceSummary = $derived($agentWorkspaces.find(ws => ws.id === workspaceId));
+const status = $derived(workspaceSummary?.state ?? 'stopped');
 const isRunning = $derived(status === 'running');
 let lastStatus = $state('');
 
