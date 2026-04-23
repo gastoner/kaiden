@@ -307,7 +307,7 @@ test('Expect clicking terminal button starts workspace when stopped', async () =
 });
 
 test('Expect clicking terminal button does not start workspace when already running', async () => {
-  agentWorkspaceStatuses.set('ws-1', 'running');
+  agentWorkspaces.set([{ ...workspaceSummary, state: 'running' }]);
 
   render(AgentWorkspaceDetails, { workspaceId: 'ws-1' });
 

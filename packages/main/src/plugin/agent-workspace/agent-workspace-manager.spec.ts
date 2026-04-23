@@ -134,7 +134,15 @@ beforeEach(() => {
   mockTask.status = '' as TaskStatus;
   mockTask.error = '';
   vi.mocked(filesystemMonitoring.createFileSystemWatcher).mockReturnValue(mockWatcher);
-  manager = new AgentWorkspaceManager(apiSender, ipcHandle, exec, cliToolRegistry, taskManager, filesystemMonitoring, webContents);
+  manager = new AgentWorkspaceManager(
+    apiSender,
+    ipcHandle,
+    exec,
+    cliToolRegistry,
+    taskManager,
+    filesystemMonitoring,
+    webContents,
+  );
   manager.init();
 });
 

@@ -25,9 +25,21 @@ import { router } from 'tinro';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { agentWorkspaceTerminals } from '/@/stores/agent-workspace-terminal-store';
-import { agentWorkspaceStatuses } from '/@/stores/agent-workspaces.svelte';
+import { agentWorkspaces, type AgentWorkspaceSummaryUI } from '/@/stores/agent-workspaces.svelte';
 
 import AgentWorkspaceTerminal from './AgentWorkspaceTerminal.svelte';
+
+const workspace: AgentWorkspaceSummaryUI = {
+  id: 'ws-1',
+  name: 'test-workspace',
+  project: 'test-project',
+  agent: 'test-agent',
+  state: 'stopped',
+  paths: {
+    source: '/home/user/projects/test',
+    configuration: '/home/user/.config/kaiden/workspaces/test.yaml',
+  },
+};
 
 vi.mock(import('tinro'));
 
@@ -52,7 +64,7 @@ beforeEach(() => {
   });
   shellInAgentWorkspaceMock = vi.mocked(window.shellInAgentWorkspace);
   agentWorkspaceTerminals.set([]);
-  agentWorkspaceStatuses.clear();
+  agentWorkspaces.set([]);
 });
 
 test('shows empty screen when workspace is not running', async () => {
@@ -64,7 +76,7 @@ test('shows empty screen when workspace is not running', async () => {
 });
 
 test('calls shellInAgentWorkspace when workspace is running', async () => {
-  agentWorkspaceStatuses.set('ws-1', 'running');
+  agentWorkspaces.set([{ ...workspace, state: 'running' }]);
 
   const sendCallbackId = 42;
   shellInAgentWorkspaceMock.mockResolvedValue(sendCallbackId);
@@ -81,7 +93,7 @@ test('calls shellInAgentWorkspace when workspace is running', async () => {
 });
 
 test('writes received data to xterm terminal', async () => {
-  agentWorkspaceStatuses.set('ws-1', 'running');
+  agentWorkspaces.set([{ ...workspace, state: 'running' }]);
 
   let onDataCallback: (data: string) => void = () => {};
   const sendCallbackId = 42;
@@ -105,7 +117,7 @@ test('writes received data to xterm terminal', async () => {
 });
 
 test('serializes terminal buffer to store on unmount', async () => {
-  agentWorkspaceStatuses.set('ws-1', 'running');
+  agentWorkspaces.set([{ ...workspace, state: 'running' }]);
 
   let onDataCallback: (data: string) => void = () => {};
   const sendCallbackId = 42;
@@ -132,7 +144,7 @@ test('serializes terminal buffer to store on unmount', async () => {
 });
 
 test('receiveEndCallback reconnects when shell ends while workspace is running', async () => {
-  agentWorkspaceStatuses.set('ws-1', 'running');
+  agentWorkspaces.set([{ ...workspace, state: 'running' }]);
 
   let onEndCallback: () => void = () => {};
   const sendCallbackId = 42;
@@ -153,7 +165,7 @@ test('receiveEndCallback reconnects when shell ends while workspace is running',
 });
 
 test('receiveEndCallback schedules reconnect when workspace is not running', async () => {
-  agentWorkspaceStatuses.set('ws-1', 'running');
+  agentWorkspaces.set([{ ...workspace, state: 'running' }]);
 
   let onEndCallback: () => void = () => {};
   const sendCallbackId = 42;
@@ -167,19 +179,19 @@ test('receiveEndCallback schedules reconnect when workspace is not running', asy
   render(AgentWorkspaceTerminal, { workspaceId: 'ws-1', screenReaderMode: true });
   await waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(1));
 
-  agentWorkspaceStatuses.set('ws-1', 'stopped');
+  agentWorkspaces.set([{ ...workspace, state: 'stopped' }]);
   await tick();
   onEndCallback();
 
   expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(1);
 
-  agentWorkspaceStatuses.set('ws-1', 'running');
+  agentWorkspaces.set([{ ...workspace, state: 'running' }]);
   await waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(2));
 });
 
 test('terminal reconnects via scheduleReconnect when immediate reconnect fails', async () => {
   vi.useFakeTimers();
-  agentWorkspaceStatuses.set('ws-1', 'running');
+  agentWorkspaces.set([{ ...workspace, state: 'running' }]);
 
   let onEndCallback: () => void = () => {};
   const sendCallbackId = 42;
@@ -214,7 +226,7 @@ test('terminal reconnects via scheduleReconnect when immediate reconnect fails',
 
 test('scheduleReconnect retries when restartTerminal fails inside the timer callback', async () => {
   vi.useFakeTimers();
-  agentWorkspaceStatuses.set('ws-1', 'running');
+  agentWorkspaces.set([{ ...workspace, state: 'running' }]);
 
   let onEndCallback: () => void = () => {};
   const sendCallbackId = 42;
@@ -253,7 +265,7 @@ test('scheduleReconnect retries when restartTerminal fails inside the timer call
 
 test('concurrent receiveEndCallback calls do not create duplicate connections', async () => {
   vi.useFakeTimers();
-  agentWorkspaceStatuses.set('ws-1', 'running');
+  agentWorkspaces.set([{ ...workspace, state: 'running' }]);
 
   let onEndCallback: () => void = () => {};
   let resolveShell: ((id: number) => void) | undefined;
@@ -300,7 +312,7 @@ test('concurrent receiveEndCallback calls do not create duplicate connections', 
 
 test('receiveEndCallback during reconnect schedules safety-net retry to prevent freeze', async () => {
   vi.useFakeTimers();
-  agentWorkspaceStatuses.set('ws-1', 'running');
+  agentWorkspaces.set([{ ...workspace, state: 'running' }]);
 
   let onEndCallback: () => void = () => {};
   let resolveShell: ((id: number) => void) | undefined;
@@ -344,7 +356,7 @@ test('receiveEndCallback during reconnect schedules safety-net retry to prevent 
 });
 
 test('$effect schedules reconnect when restartTerminal fails', async () => {
-  agentWorkspaceStatuses.set('ws-1', 'running');
+  agentWorkspaces.set([{ ...workspace, state: 'running' }]);
 
   const sendCallbackId = 42;
   shellInAgentWorkspaceMock.mockImplementation(
@@ -356,11 +368,11 @@ test('$effect schedules reconnect when restartTerminal fails', async () => {
   render(AgentWorkspaceTerminal, { workspaceId: 'ws-1', screenReaderMode: true });
   await waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(1));
 
-  agentWorkspaceStatuses.set('ws-1', 'stopped');
+  agentWorkspaces.set([{ ...workspace, state: 'stopped' }]);
   await tick();
 
   shellInAgentWorkspaceMock.mockRejectedValueOnce(new Error('not ready yet'));
-  agentWorkspaceStatuses.set('ws-1', 'running');
+  agentWorkspaces.set([{ ...workspace, state: 'running' }]);
 
   await waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(2));
 
