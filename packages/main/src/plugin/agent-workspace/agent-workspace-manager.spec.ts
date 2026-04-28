@@ -16,13 +16,13 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-import type { ChildProcessWithoutNullStreams } from 'node:child_process';
-import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import type { FileSystemWatcher } from '@openkaiden/api';
 import type { WebContents } from 'electron';
+import type { IPty } from 'node-pty';
+import { spawn } from 'node-pty';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import type { IPCHandle } from '/@/plugin/api.js';
@@ -40,7 +40,7 @@ import { AgentWorkspaceManager } from './agent-workspace-manager.js';
 
 vi.mock(import('node:fs/promises'));
 vi.mock(import('yaml'));
-vi.mock(import('node:child_process'));
+vi.mock(import('node-pty'));
 
 vi.mock(import('/@/plugin/kdn-cli/kdn-cli.js'));
 
@@ -391,114 +391,111 @@ describe('stop', () => {
 });
 
 describe('shellInAgentWorkspace', () => {
-  function createMockProcess(overrides?: {
-    stdoutOn?: ReturnType<typeof vi.fn>;
-    stderrOn?: ReturnType<typeof vi.fn>;
-    processOn?: ReturnType<typeof vi.fn>;
-  }): ChildProcessWithoutNullStreams {
+  let onDataCallback: ((data: string) => void) | undefined;
+  let onExitCallback: (() => void) | undefined;
+
+  function createMockPty(): IPty {
+    onDataCallback = undefined;
+    onExitCallback = undefined;
     return {
-      stdout: { on: overrides?.stdoutOn ?? vi.fn() },
-      stderr: { on: overrides?.stderrOn ?? vi.fn() },
-      stdin: { write: vi.fn() },
-      on: overrides?.processOn ?? vi.fn(),
-      killed: false,
+      onData: vi.fn((cb: (data: string) => void) => {
+        onDataCallback = cb;
+        return { dispose: vi.fn() };
+      }),
+      onExit: vi.fn((cb: () => void) => {
+        onExitCallback = cb;
+        return { dispose: vi.fn() };
+      }),
+      write: vi.fn(),
+      resize: vi.fn(),
       kill: vi.fn(),
-    } as unknown as ChildProcessWithoutNullStreams;
+      pid: 123,
+      cols: 80,
+      rows: 24,
+      process: 'kdn',
+      handleFlowControl: false,
+      pause: vi.fn(),
+      resume: vi.fn(),
+      clear: vi.fn(),
+    } as unknown as IPty;
   }
 
-  test('returns write and resize functions', () => {
-    vi.mocked(spawn).mockReturnValue(createMockProcess());
+  test('returns write, resize, and ptyProcess', () => {
+    vi.mocked(spawn).mockReturnValue(createMockPty());
 
     const result = manager.shellInAgentWorkspace('test-workspace-1', vi.fn(), vi.fn(), vi.fn());
 
     expect(result).toHaveProperty('write');
     expect(result).toHaveProperty('resize');
-    expect(result).toHaveProperty('process');
+    expect(result).toHaveProperty('ptyProcess');
   });
 
   test('spawns kdn terminal with workspace name', () => {
-    vi.mocked(spawn).mockReturnValue(createMockProcess());
+    vi.mocked(spawn).mockReturnValue(createMockPty());
 
     manager.shellInAgentWorkspace('test-workspace-1', vi.fn(), vi.fn(), vi.fn());
 
-    expect(spawn).toHaveBeenCalledWith('kdn', ['terminal', 'test-workspace-1']);
+    expect(spawn).toHaveBeenCalledWith('kdn', ['terminal', 'test-workspace-1'], expect.any(Object));
   });
 
-  test('write function forwards data to stdin', () => {
-    const mockProcess = createMockProcess();
-    vi.mocked(spawn).mockReturnValue(mockProcess);
+  test('write function forwards data to pty', () => {
+    const mockPty = createMockPty();
+    vi.mocked(spawn).mockReturnValue(mockPty);
 
     const result = manager.shellInAgentWorkspace('test-workspace-1', vi.fn(), vi.fn(), vi.fn());
     result.write('hello');
 
-    expect(mockProcess.stdin.write).toHaveBeenCalledWith('hello');
+    expect(mockPty.write).toHaveBeenCalledWith('hello');
   });
 
-  test('calls onData when stdout emits data', () => {
-    const stdoutListeners = new Map<string, (data: Buffer) => void>();
-    const mockProcess = createMockProcess({
-      stdoutOn: vi.fn((event: string, cb: (data: Buffer) => void) => stdoutListeners.set(event, cb)),
-    });
-    vi.mocked(spawn).mockReturnValue(mockProcess);
+  test('resize function forwards dimensions to pty', () => {
+    const mockPty = createMockPty();
+    vi.mocked(spawn).mockReturnValue(mockPty);
+
+    const result = manager.shellInAgentWorkspace('test-workspace-1', vi.fn(), vi.fn(), vi.fn());
+    result.resize(120, 40);
+
+    expect(mockPty.resize).toHaveBeenCalledWith(120, 40);
+  });
+
+  test('calls onData when pty emits data', () => {
+    vi.mocked(spawn).mockReturnValue(createMockPty());
 
     const onData = vi.fn();
     manager.shellInAgentWorkspace('test-workspace-1', onData, vi.fn(), vi.fn());
 
-    const dataCallback = stdoutListeners.get('data');
-    expect(dataCallback).toBeDefined();
-    dataCallback!(Buffer.from('output'));
+    expect(onDataCallback).toBeDefined();
+    onDataCallback!('output');
 
     expect(onData).toHaveBeenCalledWith('output');
   });
 
-  test('calls onEnd when process closes', () => {
-    const processListeners = new Map<string, () => void>();
-    const mockProcess = createMockProcess({
-      processOn: vi.fn((event: string, cb: () => void) => processListeners.set(event, cb)),
-    });
-    vi.mocked(spawn).mockReturnValue(mockProcess);
+  test('calls onEnd when pty exits', () => {
+    vi.mocked(spawn).mockReturnValue(createMockPty());
 
     const onEnd = vi.fn();
     manager.shellInAgentWorkspace('test-workspace-1', vi.fn(), vi.fn(), onEnd);
 
-    const closeCallback = processListeners.get('close');
-    expect(closeCallback).toBeDefined();
-    closeCallback!();
+    expect(onExitCallback).toBeDefined();
+    onExitCallback!();
 
     expect(onEnd).toHaveBeenCalled();
-  });
-
-  test('calls onError when process emits error', () => {
-    const processListeners = new Map<string, (err: Error) => void>();
-    const mockProcess = createMockProcess({
-      processOn: vi.fn((event: string, cb: (err: Error) => void) => processListeners.set(event, cb)),
-    });
-    vi.mocked(spawn).mockReturnValue(mockProcess);
-
-    const onError = vi.fn();
-    manager.shellInAgentWorkspace('test-workspace-1', vi.fn(), onError, vi.fn());
-
-    const errorCallback = processListeners.get('error');
-    expect(errorCallback).toBeDefined();
-    errorCallback!(new Error('spawn failed'));
-
-    expect(onError).toHaveBeenCalledWith('spawn failed');
   });
 });
 
 describe('dispose', () => {
   test('kills active terminal processes', async () => {
-    vi.spyOn(exec, 'exec').mockResolvedValue(mockExecResult(JSON.stringify({ items: TEST_SUMMARIES })));
+    vi.mocked(kdnCli.listWorkspaces).mockResolvedValue(TEST_SUMMARIES);
 
-    const mockProcess = {
-      stdout: { on: vi.fn() },
-      stderr: { on: vi.fn() },
-      stdin: { write: vi.fn() },
-      on: vi.fn(),
-      killed: false,
+    const mockPty = {
+      onData: vi.fn(() => ({ dispose: vi.fn() })),
+      onExit: vi.fn(() => ({ dispose: vi.fn() })),
+      write: vi.fn(),
+      resize: vi.fn(),
       kill: vi.fn(),
-    } as unknown as ChildProcessWithoutNullStreams;
-    vi.mocked(spawn).mockReturnValue(mockProcess);
+      pid: 123,
+    } as unknown as IPty;
+    vi.mocked(spawn).mockReturnValue(mockPty);
 
     const terminalHandler = vi
       .mocked(ipcHandle)
@@ -513,11 +510,11 @@ describe('dispose', () => {
 
     manager.dispose();
 
-    expect(mockProcess.kill).toHaveBeenCalled();
+    expect(mockPty.kill).toHaveBeenCalled();
   });
 
   test('terminal IPC handler rejects when workspace id is not found', async () => {
-    vi.spyOn(exec, 'exec').mockResolvedValue(mockExecResult(JSON.stringify({ items: TEST_SUMMARIES })));
+    vi.mocked(kdnCli.listWorkspaces).mockResolvedValue(TEST_SUMMARIES);
 
     const terminalHandler = vi
       .mocked(ipcHandle)

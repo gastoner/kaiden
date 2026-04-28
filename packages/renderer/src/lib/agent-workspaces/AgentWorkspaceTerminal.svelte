@@ -97,6 +97,9 @@ function createDataCallback(): (data: string) => void {
 function receiveEndCallback(): void {
   if (!sendCallbackId) return;
 
+  sendCallbackId = undefined;
+  registerTerminal({ workspaceId, callbackId: undefined, terminal: serializeAddon?.serialize() ?? '' });
+
   if (reconnecting) {
     scheduleReconnect();
     return;
@@ -116,10 +119,22 @@ async function executeShellInWorkspace(): Promise<void> {
   if (!isRunning) {
     return;
   }
-  const existingTerminal = getExistingTerminal(workspaceId);
-  const callbackId =
-    existingTerminal?.callbackId ??
-    (await window.shellInAgentWorkspace(workspaceId, createDataCallback(), () => {}, receiveEndCallback));
+
+  const existing = getExistingTerminal(workspaceId);
+  if (existing?.callbackId !== undefined) {
+    sendCallbackId = existing.callbackId;
+    window.shellInAgentWorkspaceReattach(existing.callbackId, createDataCallback(), () => {}, receiveEndCallback);
+    registerInputHandler(existing.callbackId);
+    await window.shellInAgentWorkspaceResize(existing.callbackId, shellTerminal.cols, shellTerminal.rows);
+    return;
+  }
+
+  const callbackId = await window.shellInAgentWorkspace(
+    workspaceId,
+    createDataCallback(),
+    () => {},
+    receiveEndCallback,
+  );
   await window.shellInAgentWorkspaceResize(callbackId, shellTerminal.cols, shellTerminal.rows);
   registerInputHandler(callbackId);
   sendCallbackId = callbackId;
@@ -188,11 +203,7 @@ onDestroy(() => {
   }
   onDataDisposable?.dispose();
   const terminalContent = serializeAddon?.serialize() ?? '';
-  registerTerminal({
-    workspaceId,
-    callbackId: sendCallbackId,
-    terminal: terminalContent,
-  });
+  registerTerminal({ workspaceId, callbackId: sendCallbackId, terminal: terminalContent });
   serializeAddon?.dispose();
   shellTerminal?.dispose();
   sendCallbackId = undefined;
