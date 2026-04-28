@@ -116,12 +116,10 @@ async function executeShellInWorkspace(): Promise<void> {
   if (!isRunning) {
     return;
   }
-  const callbackId = await window.shellInAgentWorkspace(
-    workspaceId,
-    createDataCallback(),
-    () => {},
-    receiveEndCallback,
-  );
+  const existingTerminal = getExistingTerminal(workspaceId);
+  const callbackId =
+    existingTerminal?.callbackId ??
+    (await window.shellInAgentWorkspace(workspaceId, createDataCallback(), () => {}, receiveEndCallback));
   await window.shellInAgentWorkspaceResize(callbackId, shellTerminal.cols, shellTerminal.rows);
   registerInputHandler(callbackId);
   sendCallbackId = callbackId;
