@@ -376,6 +376,18 @@ export function initExposure(): void {
     },
   );
 
+  contextBridge.exposeInMainWorld('shellInAgentWorkspaceClose', async (callbackId: number): Promise<void> => {
+    onDataCallbacksShellInAgentWorkspace.delete(callbackId);
+    return ipcInvoke('agent-workspace:terminalClose', callbackId);
+  });
+
+  contextBridge.exposeInMainWorld(
+    'shellInAgentWorkspaceReattach',
+    (callbackId: number, onData: (data: string) => void, onError: (error: string) => void, onEnd: () => void): void => {
+      onDataCallbacksShellInAgentWorkspace.set(callbackId, { onData, onError, onEnd });
+    },
+  );
+
   contextBridge.exposeInMainWorld(
     'shellInAgentWorkspaceSend',
     async (dataId: number, content: string): Promise<void> => {

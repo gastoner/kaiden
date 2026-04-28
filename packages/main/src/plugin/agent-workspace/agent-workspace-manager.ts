@@ -16,7 +16,6 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -24,6 +23,8 @@ import { join } from 'node:path';
 import type { Disposable, FileSystemWatcher } from '@openkaiden/api';
 import type { WebContents } from 'electron';
 import { inject, injectable, preDestroy } from 'inversify';
+import type { IPty } from 'node-pty';
+import { spawn } from 'node-pty';
 
 import { IPCHandle, WebContentsType } from '/@/plugin/api.js';
 import { FilesystemMonitoring } from '/@/plugin/filesystem-monitoring.js';
@@ -48,7 +49,7 @@ export class AgentWorkspaceManager implements Disposable {
     number,
     { write: (param: string) => void; resize: (w: number, h: number) => void }
   >();
-  private readonly terminalProcesses = new Map<number, ChildProcessWithoutNullStreams>();
+  private readonly terminalProcesses = new Map<number, IPty>();
 
   constructor(
     @inject(ApiSenderType)
@@ -131,40 +132,34 @@ export class AgentWorkspaceManager implements Disposable {
   shellInAgentWorkspace(
     name: string,
     onData: (data: string) => void,
-    onError: (error: string) => void,
+    _onError: (error: string) => void,
     onEnd: () => void,
   ): {
     write: (param: string) => void;
     resize: (w: number, h: number) => void;
-    process: ChildProcessWithoutNullStreams;
+    ptyProcess: IPty;
   } {
-    // eslint-disable-next-line sonarjs/no-os-command-from-path
-    const childProcess = spawn('kdn', ['terminal', name]);
-
-    childProcess.stdout.on('data', (chunk: Buffer) => {
-      onData(chunk.toString('utf-8'));
+    const ptyProcess = spawn('kdn', ['terminal', name], {
+      name: 'xterm-256color',
+      env: process.env as Record<string, string>,
     });
 
-    childProcess.stderr.on('data', (chunk: Buffer) => {
-      onData(chunk.toString('utf-8'));
+    ptyProcess.onData((data: string) => {
+      onData(data);
     });
 
-    childProcess.on('error', (error: Error) => {
-      onError(error.message);
-    });
-
-    childProcess.on('close', () => {
+    ptyProcess.onExit(() => {
       onEnd();
     });
 
     return {
       write: (param: string): void => {
-        childProcess.stdin.write(param);
+        ptyProcess.write(param);
       },
-      resize: (_w: number, _h: number): void => {
-        // no-op: resize requires a PTY (e.g. node-pty); can be added later
+      resize: (cols: number, rows: number): void => {
+        ptyProcess.resize(cols, rows);
       },
-      process: childProcess,
+      ptyProcess,
     };
   }
 
@@ -226,7 +221,7 @@ export class AgentWorkspaceManager implements Disposable {
           },
         );
         this.terminalCallbacks.set(onDataId, { write: invocation.write, resize: invocation.resize });
-        this.terminalProcesses.set(onDataId, invocation.process);
+        this.terminalProcesses.set(onDataId, invocation.ptyProcess);
         return onDataId;
       },
     );
@@ -251,6 +246,19 @@ export class AgentWorkspaceManager implements Disposable {
       },
     );
 
+    this.ipcHandle('agent-workspace:terminalClose', async (_listener: unknown, onDataId: number): Promise<void> => {
+      const proc = this.terminalProcesses.get(onDataId);
+      if (proc) {
+        try {
+          proc.kill();
+        } catch {
+          /* already exited */
+        }
+      }
+      this.terminalProcesses.delete(onDataId);
+      this.terminalCallbacks.delete(onDataId);
+    });
+
     this.watchInstancesFile();
   }
 
@@ -270,8 +278,10 @@ export class AgentWorkspaceManager implements Disposable {
   dispose(): void {
     this.instancesWatcher?.dispose();
     for (const proc of this.terminalProcesses.values()) {
-      if (!proc.killed) {
+      try {
         proc.kill();
+      } catch {
+        /* already exited */
       }
     }
     this.terminalProcesses.clear();

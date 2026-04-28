@@ -28,7 +28,7 @@ beforeEach(() => {
 });
 
 test('registers and retrieves a terminal by workspace id', () => {
-  registerTerminal({ workspaceId: 'ws-1', callbackId: 1, terminal: 'buffer-content' });
+  registerTerminal({ workspaceId: 'ws-1', terminal: 'buffer-content' });
 
   const terminal = getExistingTerminal('ws-1');
   expect(terminal).toBeDefined();
@@ -41,8 +41,8 @@ test('returns undefined for non-existent workspace terminal', () => {
 });
 
 test('replaces existing terminal for the same workspace', () => {
-  registerTerminal({ workspaceId: 'ws-1', callbackId: 1, terminal: 'old-buffer' });
-  registerTerminal({ workspaceId: 'ws-1', callbackId: 2, terminal: 'new-buffer' });
+  registerTerminal({ workspaceId: 'ws-1', terminal: 'old-buffer' });
+  registerTerminal({ workspaceId: 'ws-1', terminal: 'new-buffer' });
 
   const terminals = get(agentWorkspaceTerminals);
   expect(terminals).toHaveLength(1);
@@ -61,7 +61,7 @@ test('removes terminal entries when workspace disappears from agentWorkspaces', 
     },
   ]);
 
-  registerTerminal({ workspaceId: 'ws-1', callbackId: 1, terminal: 'buffer' });
+  registerTerminal({ workspaceId: 'ws-1', terminal: 'buffer' });
   expect(get(agentWorkspaceTerminals)).toHaveLength(1);
 
   agentWorkspaces.set([]);
@@ -80,7 +80,7 @@ test('keeps terminal entries when workspace still exists', () => {
     },
   ]);
 
-  registerTerminal({ workspaceId: 'ws-1', callbackId: 1, terminal: 'buffer' });
+  registerTerminal({ workspaceId: 'ws-1', terminal: 'buffer' });
 
   agentWorkspaces.set([
     {
