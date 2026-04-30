@@ -56,6 +56,7 @@ const config = {
         'express',
         'isomorphic-ws',
         'better-sqlite3',
+        'node-pty',
         ...builtinModules.flatMap(p => [p, `node:${p}`]),
       ],
       output: {
