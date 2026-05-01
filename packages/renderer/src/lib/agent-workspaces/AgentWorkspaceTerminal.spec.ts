@@ -39,6 +39,9 @@ const workspace: AgentWorkspaceSummaryUI = {
     source: '/home/user/projects/test',
     configuration: '/home/user/.config/kaiden/workspaces/test.yaml',
   },
+  timestamps: {
+    created: Date.now(),
+  },
 };
 
 vi.mock(import('tinro'));
