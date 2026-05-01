@@ -58,6 +58,9 @@ test('removes terminal entries when workspace disappears from agentWorkspaces', 
       agent: 'agent',
       state: 'stopped',
       paths: { source: '/s', configuration: '/c' },
+      timestamps: {
+        created: Date.now(),
+      },
     },
   ]);
 
@@ -77,6 +80,9 @@ test('keeps terminal entries when workspace still exists', () => {
       agent: 'agent',
       state: 'stopped',
       paths: { source: '/s', configuration: '/c' },
+      timestamps: {
+        created: Date.now(),
+      },
     },
   ]);
 
@@ -90,6 +96,9 @@ test('keeps terminal entries when workspace still exists', () => {
       agent: 'agent',
       state: 'stopped',
       paths: { source: '/s', configuration: '/c' },
+      timestamps: {
+        created: Date.now(),
+      },
     },
   ]);
   expect(get(agentWorkspaceTerminals)).toHaveLength(1);
