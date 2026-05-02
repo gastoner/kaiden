@@ -48,7 +48,7 @@ export class KdnExtension {
     if (!binaryPath) {
       const systemResult = await this.findOnPath();
       if (systemResult) {
-        binaryPath = 'kdn';
+        binaryPath = binaryName;
         version = systemResult.version;
         installationSource = 'external';
         console.log('kdn binary found in system PATH');

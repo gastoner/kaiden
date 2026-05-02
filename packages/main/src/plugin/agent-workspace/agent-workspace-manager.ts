@@ -139,7 +139,7 @@ export class AgentWorkspaceManager implements Disposable {
     resize: (w: number, h: number) => void;
     ptyProcess: IPty;
   } {
-    const ptyProcess = spawn('kdn', ['terminal', name], {
+    const ptyProcess = spawn(this.kdnCli.getCliPath(), ['terminal', name], {
       name: 'xterm-256color',
       env: process.env as Record<string, string>,
     });
