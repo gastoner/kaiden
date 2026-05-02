@@ -432,6 +432,7 @@ describe('shellInAgentWorkspace', () => {
 
   test('spawns kdn terminal with workspace name', () => {
     vi.mocked(spawn).mockReturnValue(createMockPty());
+    vi.mocked(kdnCli.getCliPath).mockReturnValue('kdn');
 
     manager.shellInAgentWorkspace('test-workspace-1', vi.fn(), vi.fn(), vi.fn());
 
