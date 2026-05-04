@@ -7,6 +7,7 @@ import AgentWorkspaceDetailsFiles from '/@/lib/agent-workspaces/AgentWorkspaceDe
 import AgentWorkspaceDetailsOverview from '/@/lib/agent-workspaces/AgentWorkspaceDetailsOverview.svelte';
 import AgentWorkspaceDetailsSettings from '/@/lib/agent-workspaces/AgentWorkspaceDetailsSettings.svelte';
 import AgentWorkspaceDetailsTerminal from '/@/lib/agent-workspaces/AgentWorkspaceDetailsTerminal.svelte';
+import AgentWorkspaceTerminal from '/@/lib/agent-workspaces/AgentWorkspaceTerminal.svelte';
 import { withConfirmation } from '/@/lib/dialogs/messagebox-utils';
 import DetailsPage from '/@/lib/ui/DetailsPage.svelte';
 import ListItemButtonIcon from '/@/lib/ui/ListItemButtonIcon.svelte';
