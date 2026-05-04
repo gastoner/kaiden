@@ -75,7 +75,7 @@ const timeColumn = new TableColumn<WorkspaceSelectable, Date | undefined>('Time'
 
 const actionsColumn = new TableColumn<WorkspaceSelectable>('', {
   align: 'right',
-  width: '60px',
+  width: '90px',
   renderer: AgentWorkspaceActions,
   overflow: true,
 });
