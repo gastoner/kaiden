@@ -432,6 +432,51 @@ test('Expect createAgentWorkspace called without skills when none available', as
   );
 });
 
+test('Expect createAgentWorkspace called with secret ids when vault has entries', async () => {
+  vi.mocked(secretVaultStore).secretVaultInfos = writable<readonly SecretVaultInfo[]>([
+    {
+      id: 'github-token',
+      name: 'GitHub Token',
+      type: 'github',
+      description: 'Personal access token',
+    },
+    {
+      id: 'anthropic-key',
+      name: 'Anthropic Key',
+      type: 'anthropic',
+      description: 'API key',
+    },
+  ]);
+
+  render(AgentWorkspaceCreate);
+
+  await fireEvent.input(screen.getByPlaceholderText('/path/to/project'), {
+    target: { value: '/home/user/my-repo' },
+  });
+  await fireEvent.click(screen.getByRole('button', { name: 'Use all defaults and create workspace' }));
+
+  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      secrets: ['github-token', 'anthropic-key'],
+    }),
+  );
+});
+
+test('Expect createAgentWorkspace called without secrets when vault is empty', async () => {
+  render(AgentWorkspaceCreate);
+
+  await fireEvent.input(screen.getByPlaceholderText('/path/to/project'), {
+    target: { value: '/home/user/my-repo' },
+  });
+  await fireEvent.click(screen.getByRole('button', { name: 'Use all defaults and create workspace' }));
+
+  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      secrets: undefined,
+    }),
+  );
+});
+
 test('Expect Knowledges section visible after expanding customize', async () => {
   render(AgentWorkspaceCreate);
 

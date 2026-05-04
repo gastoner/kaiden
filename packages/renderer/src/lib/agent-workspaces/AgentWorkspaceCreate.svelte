@@ -261,6 +261,7 @@ async function startWorkspace(): Promise<void> {
       name: sessionName,
       skills: selectedSkillPaths.length > 0 ? selectedSkillPaths : undefined,
       network,
+      secrets: selectedSecretIds.length > 0 ? [...selectedSecretIds] : undefined,
     });
   } catch (err: unknown) {
     console.error('Failed to create agent workspace', err);

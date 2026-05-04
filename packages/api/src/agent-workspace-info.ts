@@ -62,4 +62,5 @@ export interface AgentWorkspaceCreateOptions {
   project?: string;
   skills?: string[];
   network?: NetworkConfiguration;
+  secrets?: string[];
 }

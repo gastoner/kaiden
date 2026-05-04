@@ -129,7 +129,7 @@ export class KdnCli {
   }
 
   async writeWorkspaceConfig(options: AgentWorkspaceCreateOptions): Promise<void> {
-    if (!options.skills?.length && !options.network) {
+    if (!options.skills?.length && !options.secrets?.length && !options.network) {
       return;
     }
 
@@ -146,6 +146,7 @@ export class KdnCli {
 
     existing.skills = options.skills;
     existing.network = options.network;
+    existing.secrets = options.secrets;
 
     await mkdir(configDir, { recursive: true });
     await writeFile(configPath, JSON.stringify(existing, undefined, 2) + '\n', 'utf-8');

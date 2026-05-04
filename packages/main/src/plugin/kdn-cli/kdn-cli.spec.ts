@@ -250,15 +250,6 @@ describe('create', () => {
     expect(exec.exec).toHaveBeenCalled();
   });
 
-  test('does not write workspace.json when no skills provided', async () => {
-    vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify({ id: 'ws-new' })));
-
-    await kdnCli.createWorkspace(defaultOptions);
-
-    expect(writeFile).not.toHaveBeenCalled();
-  });
-
   test('merges skills into existing workspace.json', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
     vi.mocked(readFile).mockResolvedValue(JSON.stringify({ mcp: { servers: [] } }));
@@ -332,6 +323,65 @@ describe('create', () => {
     const parsed = JSON.parse(writtenContent);
     expect(parsed.skills).toEqual(['/home/user/.kaiden/skills/kubernetes']);
     expect(parsed.network).toEqual({ mode: 'deny', hosts: ['registry.npmjs.org'] });
+  });
+
+  test('writes workspace.json with secrets before calling kdn init', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(readFile).mockRejectedValue(new Error('ENOENT'));
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify({ id: 'ws-new' })));
+
+    await kdnCli.createWorkspace({
+      ...defaultOptions,
+      secrets: ['github-token', 'anthropic-key'],
+    });
+
+    expect(mkdir).toHaveBeenCalledWith(join('/tmp/my-project', '.kaiden'), { recursive: true });
+    const writtenContent = vi.mocked(writeFile).mock.calls[0]![1] as string;
+    const parsed = JSON.parse(writtenContent);
+    expect(parsed.secrets).toEqual(['github-token', 'anthropic-key']);
+    expect(exec.exec).toHaveBeenCalled();
+  });
+
+  test('does not write workspace.json when no skills or secrets provided', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify({ id: 'ws-new' })));
+
+    await kdnCli.createWorkspace(defaultOptions);
+
+    expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  test('merges secrets into existing workspace.json preserving other fields', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({ mcp: { servers: [] } }));
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify({ id: 'ws-new' })));
+
+    await kdnCli.createWorkspace({
+      ...defaultOptions,
+      secrets: ['github-token'],
+    });
+
+    const writtenContent = vi.mocked(writeFile).mock.calls[0]![1] as string;
+    const parsed = JSON.parse(writtenContent);
+    expect(parsed.mcp).toEqual({ servers: [] });
+    expect(parsed.secrets).toEqual(['github-token']);
+  });
+
+  test('writes workspace.json with both skills and secrets', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(readFile).mockRejectedValue(new Error('ENOENT'));
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify({ id: 'ws-new' })));
+
+    await kdnCli.createWorkspace({
+      ...defaultOptions,
+      skills: ['/home/user/.kaiden/skills/kubernetes'],
+      secrets: ['github-token', 'anthropic-key'],
+    });
+
+    const writtenContent = vi.mocked(writeFile).mock.calls[0]![1] as string;
+    const parsed = JSON.parse(writtenContent);
+    expect(parsed.skills).toEqual(['/home/user/.kaiden/skills/kubernetes']);
+    expect(parsed.secrets).toEqual(['github-token', 'anthropic-key']);
   });
 });
 
