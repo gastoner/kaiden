@@ -274,6 +274,65 @@ describe('create', () => {
     expect(parsed.mcp).toEqual({ servers: [] });
     expect(parsed.skills).toEqual(['/home/user/.kaiden/skills/kubernetes']);
   });
+
+  test('writes workspace.json with network before calling kdn init', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(readFile).mockRejectedValue(new Error('ENOENT'));
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify({ id: 'ws-new' })));
+
+    await kdnCli.createWorkspace({
+      ...defaultOptions,
+      network: { mode: 'deny', hosts: ['registry.npmjs.org', 'pypi.org'] },
+    });
+
+    expect(mkdir).toHaveBeenCalledWith(join('/tmp/my-project', '.kaiden'), { recursive: true });
+    const writtenContent = vi.mocked(writeFile).mock.calls[0]![1] as string;
+    const parsed = JSON.parse(writtenContent);
+    expect(parsed.network).toEqual({ mode: 'deny', hosts: ['registry.npmjs.org', 'pypi.org'] });
+    expect(exec.exec).toHaveBeenCalled();
+  });
+
+  test('does not write workspace.json when no skills or network provided', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify({ id: 'ws-new' })));
+
+    await kdnCli.createWorkspace(defaultOptions);
+
+    expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  test('merges network into existing workspace.json', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({ mcp: { servers: [] } }));
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify({ id: 'ws-new' })));
+
+    await kdnCli.createWorkspace({
+      ...defaultOptions,
+      network: { mode: 'allow' },
+    });
+
+    const writtenContent = vi.mocked(writeFile).mock.calls[0]![1] as string;
+    const parsed = JSON.parse(writtenContent);
+    expect(parsed.mcp).toEqual({ servers: [] });
+    expect(parsed.network).toEqual({ mode: 'allow' });
+  });
+
+  test('writes workspace.json with both skills and network', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(readFile).mockRejectedValue(new Error('ENOENT'));
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify({ id: 'ws-new' })));
+
+    await kdnCli.createWorkspace({
+      ...defaultOptions,
+      skills: ['/home/user/.kaiden/skills/kubernetes'],
+      network: { mode: 'deny', hosts: ['registry.npmjs.org'] },
+    });
+
+    const writtenContent = vi.mocked(writeFile).mock.calls[0]![1] as string;
+    const parsed = JSON.parse(writtenContent);
+    expect(parsed.skills).toEqual(['/home/user/.kaiden/skills/kubernetes']);
+    expect(parsed.network).toEqual({ mode: 'deny', hosts: ['registry.npmjs.org'] });
+  });
 });
 
 describe('list', () => {

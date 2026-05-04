@@ -17,10 +17,6 @@ interface Props {
 }
 
 let { networkOptions, selectedNetwork = $bindable() }: Props = $props();
-
-function selectOption(value: string): void {
-  selectedNetwork = value;
-}
 </script>
 
 <div class="flex items-center gap-3 mb-5">
@@ -38,12 +34,11 @@ function selectOption(value: string): void {
     {#if idx > 0}
       <div class="mx-3 border-t border-[var(--pd-content-card-border)] opacity-30"></div>
     {/if}
-    <button
+    <label
       class="w-full flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors text-left
         {selectedNetwork === option.value
           ? 'bg-[var(--pd-content-card-hover-inset-bg)]'
           : 'hover:bg-[var(--pd-content-card-hover-inset-bg)]'}"
-      onclick={selectOption.bind(null, option.value)}
       aria-label={option.name}>
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
@@ -61,11 +56,11 @@ function selectOption(value: string): void {
           type="radio"
           name="networkAccess"
           value={option.value}
-          checked={selectedNetwork === option.value}
+          bind:group={selectedNetwork}
           aria-label="Use {option.name}"
-          class="accent-[var(--pd-button-primary-bg)] w-4 h-4 cursor-pointer pointer-events-none" />
+          class="accent-[var(--pd-button-primary-bg)] w-4 h-4 cursor-pointer" />
       </div>
-    </button>
+    </label>
   {/each}
 </div>
 

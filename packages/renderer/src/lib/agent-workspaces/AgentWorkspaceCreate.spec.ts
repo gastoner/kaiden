@@ -513,10 +513,10 @@ test('Expect all four network options rendered', async () => {
 
   await navigateToNetworkingStep();
 
-  expect(screen.getByRole('button', { name: 'Deny All' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Developer Preset' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Agent mode' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Unrestricted' })).toBeInTheDocument();
+  expect(screen.getByRole('radio', { name: 'Use Deny All' })).toBeInTheDocument();
+  expect(screen.getByRole('radio', { name: 'Use Developer Preset' })).toBeInTheDocument();
+  expect(screen.getByRole('radio', { name: 'Use Agent mode' })).toBeInTheDocument();
+  expect(screen.getByRole('radio', { name: 'Use Unrestricted' })).toBeInTheDocument();
 });
 
 test('Expect Developer Preset selected by default on networking step', async () => {
@@ -541,7 +541,7 @@ test('Expect selecting a different network option updates the radio', async () =
 
   await navigateToNetworkingStep();
 
-  await fireEvent.click(screen.getByRole('button', { name: 'Unrestricted' }));
+  await fireEvent.click(screen.getByRole('radio', { name: 'Use Unrestricted' }));
 
   expect(screen.getByRole('radio', { name: 'Use Unrestricted' })).toBeChecked();
   expect(screen.getByRole('radio', { name: 'Use Developer Preset' })).not.toBeChecked();
@@ -578,6 +578,10 @@ test('Expect default agent falls back to opencode when setting is empty', async 
   expect(window.createAgentWorkspace).toHaveBeenCalledWith(
     expect.objectContaining({
       agent: 'opencode',
+      network: {
+        mode: 'deny',
+        hosts: ['registry.npmjs.org', 'pypi.python.org'],
+      },
     }),
   );
 });
@@ -595,6 +599,34 @@ test('Expect default agent falls back to opencode when setting is unknown value'
   expect(window.createAgentWorkspace).toHaveBeenCalledWith(
     expect.objectContaining({
       agent: 'opencode',
+    }),
+  );
+});
+
+test('Expect createAgentWorkspace called with deny network when blocked selected', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToNetworkingStep();
+  await fireEvent.click(screen.getByRole('radio', { name: 'Use Deny All' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Start Workspace' }));
+
+  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      network: { mode: 'deny' },
+    }),
+  );
+});
+
+test('Expect createAgentWorkspace called without network when agent_mode selected', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToNetworkingStep();
+  await fireEvent.click(screen.getByRole('radio', { name: 'Use Agent mode' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Start Workspace' }));
+
+  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      network: undefined,
     }),
   );
 });
