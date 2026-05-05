@@ -582,10 +582,11 @@ test('Expect Developer Preset selected by default on networking step', async () 
   expect(screen.getByRole('radio', { name: 'Use Deny All' })).not.toBeChecked();
 });
 
-test('Expect allowlists hint text displayed on networking step', async () => {
+test('Expect allowlists hint text displayed when Unrestricted selected on networking step', async () => {
   render(AgentWorkspaceCreate);
 
   await navigateToNetworkingStep();
+  await fireEvent.click(screen.getByRole('radio', { name: 'Use Unrestricted' }));
 
   expect(screen.getByText(/Fine-grained host allowlists and static egress rules/)).toBeInTheDocument();
 });
@@ -808,6 +809,134 @@ test('Expect first compatible model used when defaultWorkspaceSettings is undefi
       model: 'ollama::llama3.2:3b',
     }),
   );
+});
+
+test('Expect custom hosts input shown when Deny All is selected on networking step', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToNetworkingStep();
+  await fireEvent.click(screen.getByRole('radio', { name: 'Use Deny All' }));
+
+  expect(screen.getByLabelText('Custom host 1')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Add Another Host' })).toBeInTheDocument();
+});
+
+test('Expect custom hosts pre-populated with registry hosts when Developer Preset is selected', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToNetworkingStep();
+
+  expect(screen.getByLabelText('Custom host 1')).toBeInTheDocument();
+  expect((screen.getByLabelText('Custom host 1') as HTMLInputElement).value).toBe('registry.npmjs.org');
+  expect((screen.getByLabelText('Custom host 2') as HTMLInputElement).value).toBe('pypi.python.org');
+  expect(screen.getByRole('button', { name: 'Add Another Host' })).toBeInTheDocument();
+});
+
+test('Expect custom hosts input hidden when Agent mode is selected on networking step', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToNetworkingStep();
+  await fireEvent.click(screen.getByRole('radio', { name: 'Use Agent mode' }));
+
+  expect(screen.queryByLabelText('Custom host 1')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Add Another Host' })).not.toBeInTheDocument();
+});
+
+test('Expect custom hosts input hidden when Unrestricted is selected on networking step', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToNetworkingStep();
+  await fireEvent.click(screen.getByRole('radio', { name: 'Use Unrestricted' }));
+
+  expect(screen.queryByLabelText('Custom host 1')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Add Another Host' })).not.toBeInTheDocument();
+});
+
+test('Expect createAgentWorkspace called with registry hosts plus custom host for Developer Preset', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToNetworkingStep();
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Add Another Host' }));
+  await fireEvent.input(screen.getByLabelText('Custom host 3'), {
+    target: { value: 'api.example.com' },
+  });
+  await fireEvent.click(screen.getByRole('button', { name: 'Start Workspace' }));
+
+  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      network: { mode: 'deny', hosts: ['registry.npmjs.org', 'pypi.python.org', 'api.example.com'] },
+    }),
+  );
+});
+
+test('Expect createAgentWorkspace called with custom hosts only for Deny All with custom host', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToNetworkingStep();
+  await fireEvent.click(screen.getByRole('radio', { name: 'Use Deny All' }));
+
+  await fireEvent.input(screen.getByLabelText('Custom host 1'), {
+    target: { value: 'internal.corp.io' },
+  });
+  await fireEvent.click(screen.getByRole('button', { name: 'Start Workspace' }));
+
+  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      network: { mode: 'deny', hosts: ['internal.corp.io'] },
+    }),
+  );
+});
+
+test('Expect Add Another Host button adds a new input field', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToNetworkingStep();
+
+  expect(screen.queryByLabelText('Custom host 3')).not.toBeInTheDocument();
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Add Another Host' }));
+
+  expect(screen.getByLabelText('Custom host 3')).toBeInTheDocument();
+});
+
+test('Expect Remove button removes a registry host', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToNetworkingStep();
+
+  expect(screen.getByLabelText('Custom host 2')).toBeInTheDocument();
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Remove host 2' }));
+
+  expect(screen.queryByLabelText('Custom host 2')).not.toBeInTheDocument();
+});
+
+test('Expect createAgentWorkspace called without removed registry host for Developer Preset', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToNetworkingStep();
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Remove host 1' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Start Workspace' }));
+
+  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      network: { mode: 'deny', hosts: ['pypi.python.org'] },
+    }),
+  );
+});
+
+test('Expect Deny All resets to empty host list when switching from Developer Preset', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToNetworkingStep();
+
+  expect((screen.getByLabelText('Custom host 1') as HTMLInputElement).value).toBe('registry.npmjs.org');
+
+  await fireEvent.click(screen.getByRole('radio', { name: 'Use Deny All' }));
+
+  expect((screen.getByLabelText('Custom host 1') as HTMLInputElement).value).toBe('');
 });
 
 const wizardStepCount = 5;

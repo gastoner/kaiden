@@ -1,5 +1,6 @@
 <script lang="ts">
-import { faShieldHalved } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faShieldHalved } from '@fortawesome/free-solid-svg-icons';
+import { Button, Input } from '@podman-desktop/ui-svelte';
 import { Icon } from '@podman-desktop/ui-svelte/icons';
 
 export interface NetworkAccessOption {
@@ -14,9 +15,22 @@ export interface NetworkAccessOption {
 interface Props {
   networkOptions: NetworkAccessOption[];
   selectedNetwork: string;
+  customHosts: string[];
+  onAddCustomHost: () => void;
+  onRemoveCustomHost: (index: number) => void;
+  onUpdateCustomHost: (index: number, value: string) => void;
 }
 
-let { networkOptions, selectedNetwork = $bindable() }: Props = $props();
+let {
+  networkOptions,
+  selectedNetwork = $bindable(),
+  customHosts,
+  onAddCustomHost,
+  onRemoveCustomHost,
+  onUpdateCustomHost,
+}: Props = $props();
+
+let showCustomHosts = $derived(selectedNetwork === 'blocked' || selectedNetwork === 'registries');
 </script>
 
 <div class="flex items-center gap-3 mb-5">
@@ -64,6 +78,27 @@ let { networkOptions, selectedNetwork = $bindable() }: Props = $props();
   {/each}
 </div>
 
-<p class="mt-4 text-xs text-[var(--pd-content-card-text)] opacity-70 leading-relaxed max-w-2xl">
-  <strong class="text-[var(--pd-modal-text)]">Allowlists and more</strong> — Fine-grained host allowlists and static egress rules live in project or workspace settings when you need them.
-</p>
+{#if showCustomHosts}
+  <div class="mt-4 p-4 rounded-xl border border-[var(--pd-content-card-border)] bg-[var(--pd-content-card-bg)]">
+    <p class="text-xs text-[var(--pd-content-card-text)] opacity-70 mb-3">Additional hosts to allow outbound access to. You can refine this list later in workspace settings.</p>
+    {#each customHosts as host, index (index)}
+      <div class="flex gap-3 mb-2 items-center">
+        <Input
+          value={host}
+          placeholder="e.g. api.example.com"
+          class="flex-1 font-mono text-sm"
+          aria-label="Custom host {index + 1}"
+          oninput={(e: Event): void => onUpdateCustomHost(index, (e.target as HTMLInputElement).value)}
+        />
+        {#if customHosts.length > 1}
+          <Button onclick={(): void => onRemoveCustomHost(index)} aria-label="Remove host {index + 1}">Remove</Button>
+        {/if}
+      </div>
+    {/each}
+    <Button class="mt-2" icon={faPlus} onclick={onAddCustomHost}>Add Another Host</Button>
+  </div>
+{:else}
+  <p class="mt-4 text-xs text-[var(--pd-content-card-text)] opacity-70 leading-relaxed max-w-2xl">
+    <strong class="text-[var(--pd-modal-text)]">Allowlists and more</strong> — Fine-grained host allowlists and static egress rules live in project or workspace settings when you need them.
+  </p>
+{/if}

@@ -94,14 +94,14 @@ const networkOptions: NetworkAccessOption[] = [
 
 const REGISTRY_HOSTS = ['registry.npmjs.org', 'pypi.python.org'];
 
-function mapNetworkSelection(value: string): NetworkConfiguration | undefined {
+function mapNetworkSelection(value: string, hosts: string[]): NetworkConfiguration | undefined {
+  const filtered = hosts.filter(h => h.trim() !== '');
   switch (value) {
     case 'open':
       return { mode: 'allow' };
     case 'registries':
-      return { mode: 'deny', hosts: REGISTRY_HOSTS };
     case 'blocked':
-      return { mode: 'deny' };
+      return { mode: 'deny', hosts: filtered.length ? filtered : undefined };
     default:
       return undefined;
   }
@@ -175,6 +175,11 @@ let selectedMcpIds = $derived(mcpItems.map(m => m.id));
 let selectedSecretIds = $derived($secretVaultInfos.map(s => s.id));
 let selectedKnowledgeIds = $derived(knowledgeItems.map(k => k.id));
 let customPaths = $state<string[]>(['']);
+let hostsByMode = $state<Record<string, string[]>>({
+  registries: [...REGISTRY_HOSTS],
+  blocked: [''],
+});
+let customHosts = $derived(hostsByMode[selectedNetwork] ?? []);
 
 // --- Step 1 UI state ---
 let nameManuallyEdited = $state(false);
@@ -224,6 +229,22 @@ function removeCustomPath(index: number): void {
 
 function updateCustomPath(index: number, value: string): void {
   customPaths = customPaths.map((p, i) => (i === index ? value : p));
+}
+
+function addCustomHost(): void {
+  const current = hostsByMode[selectedNetwork] ?? [];
+  hostsByMode = { ...hostsByMode, [selectedNetwork]: [...current, ''] };
+}
+
+function removeCustomHost(index: number): void {
+  const current = hostsByMode[selectedNetwork] ?? [];
+  if (current.length <= 1) return;
+  hostsByMode = { ...hostsByMode, [selectedNetwork]: current.filter((_, i) => i !== index) };
+}
+
+function updateCustomHost(index: number, value: string): void {
+  const current = hostsByMode[selectedNetwork] ?? [];
+  hostsByMode = { ...hostsByMode, [selectedNetwork]: current.map((h, i) => (i === index ? value : h)) };
 }
 
 async function handleBrowseCustomPath(index: number): Promise<void> {
@@ -283,7 +304,7 @@ async function startWorkspace(): Promise<void> {
 
   try {
     const selectedSkillPaths = $skillInfos.filter(s => selectedSkillIds.includes(s.name)).map(s => s.path);
-    const network = mapNetworkSelection(selectedNetwork);
+    const network = mapNetworkSelection(selectedNetwork, customHosts);
 
     const agentDef = agentDefinitions.find(d => d.cliName === selectedAgent);
     await window.createAgentWorkspace({
@@ -352,7 +373,13 @@ async function startWorkspace(): Promise<void> {
                 onRemoveCustomPath={removeCustomPath}
                 onUpdateCustomPath={updateCustomPath} />
             {:else if currentStepId === 'networking'}
-              <AgentWorkspaceCreateStepNetworking {networkOptions} bind:selectedNetwork />
+              <AgentWorkspaceCreateStepNetworking
+                {networkOptions}
+                bind:selectedNetwork
+                {customHosts}
+                onAddCustomHost={addCustomHost}
+                onRemoveCustomHost={removeCustomHost}
+                onUpdateCustomHost={updateCustomHost} />
             {/if}
           </div>
 
