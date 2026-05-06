@@ -37,8 +37,8 @@ let titlePlaceholder = $state(category === 'bug' ? 'Bug Report Title' : 'Feature
 let descriptionPlaceholder = $state(category === 'bug' ? 'Bug description' : 'Feature description');
 let existingIssuesLink = $state(
   category === 'bug'
-    ? 'https://github.com/podman-desktop/podman-desktop/issues?q=label%3A%22kind%2Fbug%20%F0%9F%90%9E%22'
-    : 'https://github.com/podman-desktop/podman-desktop/issues?q=label%3A%22kind%2Ffeature%20%F0%9F%92%A1%22',
+    ? 'https://github.com/openkaiden/kaiden/issues?q=label%3A%22kind%2Fbug%20%F0%9F%90%9E%22'
+    : 'https://github.com/openkaiden/kaiden/issues?q=label%3A%22kind%2Ffeature%20%F0%9F%92%A1%22',
 );
 
 $effect(() => contentChange(Boolean(issueTitle || issueDescription)));
@@ -81,7 +81,7 @@ async function previewOnGitHub(): Promise<void> {
 
 <FeedbackForm>
   <svelte:fragment slot="content">
-    <div class="text-sm text-[var(--pd-state-warning)]">You can search existing {category} issues on <Link aria-label="GitHub issues" onclick={openGitHubIssues}>github.com/podman-desktop/podman-desktop/issues</Link></div>
+    <div class="text-sm text-[var(--pd-state-warning)]">You can search existing {category} issues on <Link aria-label="GitHub issues" onclick={openGitHubIssues}>github.com/openkaiden/kaiden/issues</Link></div>
     <!-- issue title -->
     <label for="issueTitle" class="block mt-4 mb-2 text-sm font-medium text-[var(--pd-modal-text)]">Title</label>
     <input
