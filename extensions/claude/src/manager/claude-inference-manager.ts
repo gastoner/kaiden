@@ -39,7 +39,10 @@ export class ClaudeInferenceManager {
   private connections: Map<string, Disposable> = new Map();
 
   async init(): Promise<void> {
-    this.claudeProvider.setInferenceProviderConnectionFactory({ create: this.factory.bind(this) });
+    this.claudeProvider.setInferenceProviderConnectionFactory({
+      connectionTypes: ['cloud'],
+      create: this.factory.bind(this),
+    });
     await this.restoreConnections();
   }
 

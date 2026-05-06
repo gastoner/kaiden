@@ -113,7 +113,10 @@ export class VertexAi implements Disposable {
       },
     });
 
-    this.provider?.setInferenceProviderConnectionFactory({ create: this.factory.bind(this) });
+    this.provider?.setInferenceProviderConnectionFactory({
+      connectionTypes: ['cloud'],
+      create: this.factory.bind(this),
+    });
 
     await this.restoreConnections();
   }

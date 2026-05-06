@@ -42,12 +42,8 @@ export function getModels(providerInfos: ProviderInfo[]): ModelInfo[] {
   );
 }
 
-function isCloudLike(type: InferenceProviderConnectionType | undefined): boolean {
-  return type === 'cloud' || !type;
-}
-
 export function getCloudCatalogModels(providerInfos: ProviderInfo[]): CatalogModelInfo[] {
-  return getCatalogModels(providerInfos).filter(m => isCloudLike(m.type));
+  return getCatalogModels(providerInfos).filter(m => m.type === 'cloud');
 }
 
 export function getInHouseCatalogModels(providerInfos: ProviderInfo[]): CatalogModelInfo[] {
@@ -79,7 +75,7 @@ export function getCatalogModels(providerInfos: ProviderInfo[]): CatalogModelInf
 }
 
 export function getCloudConnectionSummaries(providerInfos: ProviderInfo[]): InferenceConnectionSummary[] {
-  return getInferenceConnectionSummaries(providerInfos).filter(c => isCloudLike(c.connectionType));
+  return getInferenceConnectionSummaries(providerInfos).filter(c => c.connectionType === 'cloud');
 }
 
 export function getInHouseConnectionSummaries(providerInfos: ProviderInfo[]): InferenceConnectionSummary[] {
@@ -93,6 +89,10 @@ export function getLocalConnectionSummaries(providerInfos: ProviderInfo[]): Infe
 export function getInferenceConnectionSummaries(providerInfos: ProviderInfo[]): InferenceConnectionSummary[] {
   const result: InferenceConnectionSummary[] = [];
   for (const provider of providerInfos) {
+    const factoryTypes = provider.inferenceProviderConnectionCreationTypes ?? [];
+    const creationDisplayName = provider.inferenceProviderConnectionCreationDisplayName ?? provider.name;
+    const coveredTypes = new Set(provider.inferenceConnections.map(c => c.type));
+
     if (provider.inferenceConnections.length > 0) {
       const started = provider.inferenceConnections.find(c => c.status === 'started');
       const representative = started ?? provider.inferenceConnections[0];
@@ -105,17 +105,20 @@ export function getInferenceConnectionSummaries(providerInfos: ProviderInfo[]): 
         connectionType: representative.type,
         status: representative.status,
         modelCount: totalModels,
-        creationDisplayName: provider.inferenceProviderConnectionCreationDisplayName ?? provider.name,
+        creationDisplayName,
       });
-    } else if (provider.inferenceProviderConnectionCreation) {
+    }
+
+    for (const type of factoryTypes.filter(t => !coveredTypes.has(t))) {
       result.push({
         providerName: provider.name,
         providerId: provider.id,
         providerInternalId: provider.internalId,
         connectionName: '',
+        connectionType: type,
         status: 'not-configured',
         modelCount: 0,
-        creationDisplayName: provider.inferenceProviderConnectionCreationDisplayName ?? provider.name,
+        creationDisplayName,
       });
     }
   }

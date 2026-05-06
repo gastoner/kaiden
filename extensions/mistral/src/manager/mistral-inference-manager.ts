@@ -39,7 +39,10 @@ export class MistralInferenceManager {
   private connections: Map<string, Disposable> = new Map();
 
   async init(): Promise<void> {
-    this.mistralProvider.setInferenceProviderConnectionFactory({ create: this.factory.bind(this) });
+    this.mistralProvider.setInferenceProviderConnectionFactory({
+      connectionTypes: ['cloud'],
+      create: this.factory.bind(this),
+    });
     await this.restoreConnections();
   }
 

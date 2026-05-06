@@ -117,6 +117,7 @@ describe('init', () => {
       }),
     );
     expect(PROVIDER_MOCK.setInferenceProviderConnectionFactory).toHaveBeenCalledWith({
+      connectionTypes: ['cloud'],
       create: expect.any(Function),
     });
   });

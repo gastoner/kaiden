@@ -62,7 +62,10 @@ export class OpenShiftAI implements Disposable {
     });
 
     // register inference Provider connection factory
-    this.provider.setInferenceProviderConnectionFactory({ create: this.inferenceFactory.bind(this) });
+    this.provider.setInferenceProviderConnectionFactory({
+      connectionTypes: ['self-hosted'],
+      create: this.inferenceFactory.bind(this),
+    });
 
     // restore persistent connections
     await this.restoreConnections();

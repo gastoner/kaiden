@@ -158,6 +158,8 @@ export interface ProviderInfo {
   inferenceProviderConnectionCreationDisplayName?: string;
   // optional creation button title (if defined)
   inferenceProviderConnectionCreationButtonTitle?: string;
+  // optional connection types from the factory (e.g. ['cloud', 'self-hosted'])
+  inferenceProviderConnectionCreationTypes?: InferenceProviderConnectionType[];
 
   /**
    * RAG Provider connection

@@ -761,6 +761,7 @@ declare module '@openkaiden/api' {
 
   // create programmatically a InferenceProviderConnection
   export interface InferenceProviderConnectionFactory extends ProviderConnectionFactory {
+    connectionTypes: InferenceProviderConnectionType[];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     create(params: { [key: string]: any }, logger?: Logger, token?: CancellationToken): Promise<void>;
   }

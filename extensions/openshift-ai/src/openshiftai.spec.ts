@@ -122,6 +122,7 @@ describe('init', () => {
 
     expect(PROVIDER_MOCK.setInferenceProviderConnectionFactory).toHaveBeenCalledOnce();
     expect(PROVIDER_MOCK.setInferenceProviderConnectionFactory).toHaveBeenCalledWith({
+      connectionTypes: ['self-hosted'],
       create: expect.any(Function),
     });
   });

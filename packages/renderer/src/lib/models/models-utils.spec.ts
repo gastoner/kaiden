@@ -123,6 +123,7 @@ test('getInferenceConnectionSummaries emits not-configured entry when creation i
     inferenceConnections: [],
     inferenceProviderConnectionCreation: true,
     inferenceProviderConnectionCreationDisplayName: 'OpenAI (Hosted)',
+    inferenceProviderConnectionCreationTypes: ['cloud'],
   } as unknown as ProviderInfo;
 
   const result = getInferenceConnectionSummaries([provider]);
@@ -135,8 +136,75 @@ test('getInferenceConnectionSummaries emits not-configured entry when creation i
     status: 'not-configured',
     modelCount: 0,
     creationDisplayName: 'OpenAI (Hosted)',
+    connectionType: 'cloud',
   });
-  expect(result[0].connectionType).toBeUndefined();
+});
+
+test('getCloudConnectionSummaries includes not-configured entries with cloud factory type', () => {
+  const providers = [
+    {
+      id: 'claude',
+      name: 'Claude',
+      internalId: 'claude-internal',
+      inferenceConnections: [],
+      inferenceProviderConnectionCreation: true,
+      inferenceProviderConnectionCreationTypes: ['cloud'],
+    },
+    {
+      id: 'gemini',
+      name: 'Gemini',
+      internalId: 'gemini-internal',
+      inferenceConnections: [{ name: 'default', type: 'cloud', status: 'started', models: [{ label: 'gemini-pro' }] }],
+    },
+  ] as unknown as ProviderInfo[];
+
+  const result = getCloudConnectionSummaries(providers);
+  expect(result).toHaveLength(2);
+  expect(result.map(c => c.providerId)).toEqual(['claude', 'gemini']);
+});
+
+test('getCloudConnectionSummaries excludes not-configured entries with self-hosted factory type', () => {
+  const providers = [
+    {
+      id: 'openshift-ai',
+      name: 'OpenShift AI',
+      internalId: 'oai-internal',
+      inferenceConnections: [],
+      inferenceProviderConnectionCreation: true,
+      inferenceProviderConnectionCreationTypes: ['self-hosted'],
+    },
+    {
+      id: 'gemini',
+      name: 'Gemini',
+      internalId: 'gemini-internal',
+      inferenceConnections: [{ name: 'default', type: 'cloud', status: 'started', models: [{ label: 'gemini-pro' }] }],
+    },
+  ] as unknown as ProviderInfo[];
+
+  const result = getCloudConnectionSummaries(providers);
+  expect(result).toHaveLength(1);
+  expect(result[0].providerId).toBe('gemini');
+});
+
+test('getInHouseConnectionSummaries includes not-configured entries with self-hosted factory type', () => {
+  const providers = [
+    {
+      id: 'openshift-ai',
+      name: 'OpenShift AI',
+      internalId: 'oai-internal',
+      inferenceConnections: [],
+      inferenceProviderConnectionCreation: true,
+      inferenceProviderConnectionCreationTypes: ['self-hosted'],
+    },
+  ] as unknown as ProviderInfo[];
+
+  const result = getInHouseConnectionSummaries(providers);
+  expect(result).toHaveLength(1);
+  expect(result[0]).toMatchObject({
+    providerId: 'openshift-ai',
+    connectionType: 'self-hosted',
+    status: 'not-configured',
+  });
 });
 
 test('getCloudCatalogModels excludes self-hosted models', () => {
