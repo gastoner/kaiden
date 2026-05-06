@@ -20,7 +20,15 @@ import { expect, test } from 'vitest';
 
 import type { ProviderInfo } from '/@api/provider-info';
 
-import { getCatalogModels, getInferenceConnectionSummaries, getModels } from './models-utils';
+import {
+  getCatalogModels,
+  getCloudCatalogModels,
+  getCloudConnectionSummaries,
+  getInferenceConnectionSummaries,
+  getInHouseCatalogModels,
+  getInHouseConnectionSummaries,
+  getModels,
+} from './models-utils';
 
 test('getModels returns empty array for providers without inference connections', () => {
   const provider = { inferenceConnections: [] } as unknown as ProviderInfo;
@@ -129,4 +137,134 @@ test('getInferenceConnectionSummaries emits not-configured entry when creation i
     creationDisplayName: 'OpenAI (Hosted)',
   });
   expect(result[0].connectionType).toBeUndefined();
+});
+
+test('getCloudCatalogModels excludes self-hosted models', () => {
+  const providers = [
+    {
+      id: 'gemini',
+      name: 'Gemini',
+      inferenceConnections: [{ name: 'default', type: 'cloud', status: 'started', models: [{ label: 'gemini-pro' }] }],
+    },
+    {
+      id: 'openshift-ai',
+      name: 'OpenShift AI',
+      inferenceConnections: [
+        { name: 'cluster', type: 'self-hosted', status: 'started', models: [{ label: 'llama-3' }] },
+      ],
+    },
+  ] as unknown as ProviderInfo[];
+
+  const result = getCloudCatalogModels(providers);
+  expect(result).toHaveLength(1);
+  expect(result[0].providerId).toBe('gemini');
+});
+
+test('getCloudConnectionSummaries excludes self-hosted connections', () => {
+  const providers = [
+    {
+      id: 'gemini',
+      name: 'Gemini',
+      internalId: 'gemini-internal',
+      inferenceConnections: [{ name: 'default', type: 'cloud', status: 'started', models: [{ label: 'gemini-pro' }] }],
+    },
+    {
+      id: 'openshift-ai',
+      name: 'OpenShift AI',
+      internalId: 'oai-internal',
+      inferenceConnections: [
+        { name: 'cluster', type: 'self-hosted', status: 'started', models: [{ label: 'llama-3' }] },
+      ],
+    },
+  ] as unknown as ProviderInfo[];
+
+  const result = getCloudConnectionSummaries(providers);
+  expect(result).toHaveLength(1);
+  expect(result[0].providerId).toBe('gemini');
+});
+
+test('getInHouseCatalogModels returns only self-hosted models', () => {
+  const providers = [
+    {
+      id: 'gemini',
+      name: 'Gemini',
+      inferenceConnections: [{ name: 'default', type: 'cloud', status: 'started', models: [{ label: 'gemini-pro' }] }],
+    },
+    {
+      id: 'openshift-ai',
+      name: 'OpenShift AI',
+      inferenceConnections: [
+        {
+          name: 'cluster',
+          type: 'self-hosted',
+          status: 'started',
+          models: [{ label: 'llama-3' }, { label: 'mistral' }],
+        },
+      ],
+    },
+    {
+      id: 'ollama',
+      name: 'Ollama',
+      inferenceConnections: [{ name: 'local', type: 'local', status: 'started', models: [{ label: 'phi-3' }] }],
+    },
+  ] as unknown as ProviderInfo[];
+
+  const result = getInHouseCatalogModels(providers);
+  expect(result).toHaveLength(2);
+  expect(result.every(m => m.providerId === 'openshift-ai')).toBe(true);
+  expect(result.map(m => m.label)).toEqual(['llama-3', 'mistral']);
+});
+
+test('getInHouseCatalogModels returns empty when no self-hosted providers', () => {
+  const providers = [
+    {
+      id: 'gemini',
+      name: 'Gemini',
+      inferenceConnections: [{ name: 'default', type: 'cloud', status: 'started', models: [{ label: 'gemini-pro' }] }],
+    },
+  ] as unknown as ProviderInfo[];
+
+  expect(getInHouseCatalogModels(providers)).toEqual([]);
+});
+
+test('getInHouseConnectionSummaries returns only self-hosted connections', () => {
+  const providers = [
+    {
+      id: 'gemini',
+      name: 'Gemini',
+      internalId: 'gemini-internal',
+      inferenceConnections: [{ name: 'default', type: 'cloud', status: 'started', models: [{ label: 'gemini-pro' }] }],
+    },
+    {
+      id: 'openshift-ai',
+      name: 'OpenShift AI',
+      internalId: 'oai-internal',
+      inferenceConnections: [
+        { name: 'cluster', type: 'self-hosted', status: 'started', models: [{ label: 'llama-3' }] },
+      ],
+    },
+  ] as unknown as ProviderInfo[];
+
+  const result = getInHouseConnectionSummaries(providers);
+  expect(result).toHaveLength(1);
+  expect(result[0]).toMatchObject({
+    providerName: 'OpenShift AI',
+    providerId: 'openshift-ai',
+    connectionType: 'self-hosted',
+    status: 'started',
+    modelCount: 1,
+  });
+});
+
+test('getInHouseConnectionSummaries returns empty when no self-hosted providers', () => {
+  const providers = [
+    {
+      id: 'ollama',
+      name: 'Ollama',
+      internalId: 'ollama-internal',
+      inferenceConnections: [{ name: 'local', type: 'local', status: 'started', models: [{ label: 'phi-3' }] }],
+    },
+  ] as unknown as ProviderInfo[];
+
+  expect(getInHouseConnectionSummaries(providers)).toEqual([]);
 });

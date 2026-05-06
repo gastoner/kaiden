@@ -43,11 +43,15 @@ export function getModels(providerInfos: ProviderInfo[]): ModelInfo[] {
 }
 
 function isCloudLike(type: InferenceProviderConnectionType | undefined): boolean {
-  return type === 'cloud' || type === 'self-hosted' || !type;
+  return type === 'cloud' || !type;
 }
 
 export function getCloudCatalogModels(providerInfos: ProviderInfo[]): CatalogModelInfo[] {
   return getCatalogModels(providerInfos).filter(m => isCloudLike(m.type));
+}
+
+export function getInHouseCatalogModels(providerInfos: ProviderInfo[]): CatalogModelInfo[] {
+  return getCatalogModels(providerInfos).filter(m => m.type === 'self-hosted');
 }
 
 export function getLocalCatalogModels(providerInfos: ProviderInfo[]): CatalogModelInfo[] {
@@ -76,6 +80,10 @@ export function getCatalogModels(providerInfos: ProviderInfo[]): CatalogModelInf
 
 export function getCloudConnectionSummaries(providerInfos: ProviderInfo[]): InferenceConnectionSummary[] {
   return getInferenceConnectionSummaries(providerInfos).filter(c => isCloudLike(c.connectionType));
+}
+
+export function getInHouseConnectionSummaries(providerInfos: ProviderInfo[]): InferenceConnectionSummary[] {
+  return getInferenceConnectionSummaries(providerInfos).filter(c => c.connectionType === 'self-hosted');
 }
 
 export function getLocalConnectionSummaries(providerInfos: ProviderInfo[]): InferenceConnectionSummary[] {

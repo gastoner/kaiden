@@ -20,6 +20,8 @@ import {
   type CatalogModelInfo,
   getCloudCatalogModels,
   getCloudConnectionSummaries,
+  getInHouseCatalogModels,
+  getInHouseConnectionSummaries,
   getLocalCatalogModels,
   getLocalConnectionSummaries,
   type InferenceConnectionSummary,
@@ -50,6 +52,8 @@ let searchTerm = $state('');
 
 let cloudModels: CatalogModelInfo[] = $derived(getCloudCatalogModels($providerInfos));
 let cloudConnections: InferenceConnectionSummary[] = $derived(getCloudConnectionSummaries($providerInfos));
+let inHouseModels: CatalogModelInfo[] = $derived(getInHouseCatalogModels($providerInfos));
+let inHouseConnections: InferenceConnectionSummary[] = $derived(getInHouseConnectionSummaries($providerInfos));
 let localModels: CatalogModelInfo[] = $derived(getLocalCatalogModels($providerInfos));
 let localConnections: InferenceConnectionSummary[] = $derived(getLocalConnectionSummaries($providerInfos));
 
@@ -58,6 +62,12 @@ let filteredCloudModels: ModelSelectable[] = $derived(
 );
 let filteredCloudConnections: InferenceConnectionSummary[] = $derived(
   filterConnectionsBySearch(cloudConnections, searchTerm),
+);
+let filteredInHouseModels: ModelSelectable[] = $derived(
+  filterBySearch(inHouseModels, searchTerm).map(m => ({ ...m, selected: false })),
+);
+let filteredInHouseConnections: InferenceConnectionSummary[] = $derived(
+  filterConnectionsBySearch(inHouseConnections, searchTerm),
 );
 let filteredLocalModels: ModelSelectable[] = $derived(
   filterBySearch(localModels, searchTerm).map(m => ({ ...m, selected: false })),
@@ -196,11 +206,36 @@ function selectCategory(cat: Category): void {
           </div>
         </div>
       {:else if activeCategory === 'corporate'}
-        <div class="flex items-center justify-center h-full">
-          <div class="text-center text-[var(--pd-content-text)]">
-            <Icon icon={faIndustry} class="mb-3 opacity-40" size="2.5em" />
-            <p class="text-sm">In-house models coming soon</p>
-            <p class="text-xs mt-1 opacity-60">OpenShift AI integration will be available here</p>
+        <div class="px-5 pb-3">
+          <p class="text-xs text-[var(--pd-content-text)] opacity-70">
+            Self-hosted inference endpoints from OpenShift AI and similar platforms. Connection status and models are shown below.
+          </p>
+        </div>
+        <div class="flex min-w-full h-full">
+          <div class="flex flex-col w-full">
+            {#if inHouseModels.length === 0 && inHouseConnections.length === 0}
+              <div class="flex items-center justify-center h-full">
+                <div class="text-center text-[var(--pd-content-text)]">
+                  <Icon icon={faIndustry} class="mb-3 opacity-40" size="2.5em" />
+                  <p class="text-sm">No in-house providers configured</p>
+                  <p class="text-xs mt-1 opacity-60">Connect an OpenShift AI instance to see models here</p>
+                </div>
+              </div>
+            {:else if searchTerm && filteredInHouseModels.length === 0 && filteredInHouseConnections.length === 0}
+              <FilteredEmptyScreen icon={NoLogIcon} kind="models" bind:searchTerm />
+            {:else}
+              {#if filteredInHouseConnections.length > 0}
+                <div class="px-5 pt-4 pb-2">
+                  <ProviderConnectionTiles connections={filteredInHouseConnections} />
+                </div>
+              {/if}
+
+              {#if filteredInHouseModels.length > 0}
+                <div class="flex min-w-full">
+                  <Table kind="models" data={filteredInHouseModels} columns={columns} row={row} defaultSortColumn="Name" />
+                </div>
+              {/if}
+            {/if}
           </div>
         </div>
       {:else if activeCategory === 'local'}
