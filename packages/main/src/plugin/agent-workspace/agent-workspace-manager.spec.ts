@@ -164,14 +164,15 @@ describe('init', () => {
     expect(ipcHandle).toHaveBeenCalledWith('agent-workspace:getCliInfo', expect.any(Function));
   });
 
-  test('registers hidden runtime configuration', () => {
+  test('registers runtime configuration with enum', () => {
     expect(configurationRegistry.registerConfigurations).toHaveBeenCalledWith([
       expect.objectContaining({
-        id: 'agentWorkspace.runtime',
+        id: 'preferences.agentWorkspace',
         properties: expect.objectContaining({
           'agentWorkspace.runtime': expect.objectContaining({
             type: 'string',
-            hidden: true,
+            enum: ['podman', 'openshell'],
+            default: 'podman',
           }),
         }),
       }),

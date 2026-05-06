@@ -170,14 +170,15 @@ export class AgentWorkspaceManager implements Disposable {
 
   init(): void {
     const runtimeConfiguration: IConfigurationNode = {
-      id: `${AgentWorkspaceSettings.SectionName}.${AgentWorkspaceSettings.Runtime}`,
+      id: `preferences.${AgentWorkspaceSettings.SectionName}`,
       title: 'Agent Workspace',
       type: 'object',
       properties: {
         [`${AgentWorkspaceSettings.SectionName}.${AgentWorkspaceSettings.Runtime}`]: {
           description: 'Override the container runtime used when creating agent workspaces.',
           type: 'string',
-          hidden: true,
+          enum: ['podman', 'openshell'],
+          default: 'podman',
         },
       },
     };
