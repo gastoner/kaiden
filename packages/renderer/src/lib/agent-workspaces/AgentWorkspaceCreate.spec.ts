@@ -23,6 +23,7 @@ import userEvent from '@testing-library/user-event';
 import { writable } from 'svelte/store';
 import { beforeEach, expect, test, vi } from 'vitest';
 
+import * as agentWorkspaceRuntimeStore from '/@/stores/agentworkspace-runtime';
 import * as mcpStore from '/@/stores/mcp-remote-servers';
 import * as modelCatalogStore from '/@/stores/model-catalog';
 import * as providerStore from '/@/stores/providers';
@@ -38,6 +39,7 @@ import type { SkillInfo } from '/@api/skill/skill-info';
 import AgentWorkspaceCreate from './AgentWorkspaceCreate.svelte';
 
 vi.mock(import('/@/navigation'));
+vi.mock(import('/@/stores/agentworkspace-runtime'));
 vi.mock(import('/@/stores/skills'));
 vi.mock(import('/@/stores/mcp-remote-servers'));
 vi.mock(import('/@/stores/secret-vault'));
@@ -52,6 +54,7 @@ beforeEach(() => {
     cancel: vi.fn(),
     onfinish: null,
   });
+  vi.mocked(agentWorkspaceRuntimeStore).agentWorkspaceRuntime = writable<string>('podman');
   vi.mocked(skillsStore).skillInfos = writable<SkillInfo[]>([]);
   vi.mocked(mcpStore).mcpRemoteServerInfos = writable<MCPRemoteServerInfo[]>([]);
   vi.mocked(secretVaultStore).secretVaultInfos = writable<readonly SecretVaultInfo[]>([]);
@@ -991,6 +994,24 @@ test('Expect Deny All resets to empty host list when switching from Developer Pr
   await fireEvent.click(screen.getByRole('radio', { name: 'Use Deny All' }));
 
   expect((screen.getByLabelText('Custom host 1') as HTMLInputElement).value).toBe('');
+});
+
+test('Expect Unrestricted network option disabled when runtime is openshell', async () => {
+  vi.mocked(agentWorkspaceRuntimeStore).agentWorkspaceRuntime = writable<string>('openshell');
+  render(AgentWorkspaceCreate);
+
+  await navigateToNetworkingStep();
+
+  expect(screen.getByRole('radio', { name: 'Use Unrestricted' })).toBeDisabled();
+});
+
+test('Expect Unrestricted network option enabled when runtime is podman', async () => {
+  vi.mocked(agentWorkspaceRuntimeStore).agentWorkspaceRuntime = writable<string>('podman');
+  render(AgentWorkspaceCreate);
+
+  await navigateToNetworkingStep();
+
+  expect(screen.getByRole('radio', { name: 'Use Unrestricted' })).toBeEnabled();
 });
 
 const wizardStepCount = 5;

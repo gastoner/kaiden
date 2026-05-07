@@ -19,6 +19,7 @@ import type { ChecklistItem } from '/@/lib/ui/ChecklistPanel.svelte';
 import FormPage from '/@/lib/ui/FormPage.svelte';
 import WizardStepper from '/@/lib/ui/WizardStepper.svelte';
 import { handleNavigation } from '/@/navigation';
+import { agentWorkspaceRuntime } from '/@/stores/agentworkspace-runtime';
 import { mcpRemoteServerInfos } from '/@/stores/mcp-remote-servers';
 import { disabledModels, isModelEnabled, modelKey } from '/@/stores/model-catalog';
 import { providerInfos } from '/@/stores/providers';
@@ -61,7 +62,7 @@ const fileAccessOptions: FileAccessOption[] = [
   },
 ];
 
-const networkOptions: NetworkAccessOption[] = [
+const baseNetworkOptions: NetworkAccessOption[] = [
   {
     value: 'blocked',
     name: 'Deny All',
@@ -96,6 +97,13 @@ const networkOptions: NetworkAccessOption[] = [
     disabled: false,
   },
 ];
+
+let networkOptions: NetworkAccessOption[] = $derived(
+  baseNetworkOptions.map(option => ({
+    ...option,
+    disabled: option.value === 'open' && $agentWorkspaceRuntime === 'openshell' ? true : option.disabled,
+  })),
+);
 
 const REGISTRY_HOSTS = ['registry.npmjs.org', 'pypi.python.org'];
 
