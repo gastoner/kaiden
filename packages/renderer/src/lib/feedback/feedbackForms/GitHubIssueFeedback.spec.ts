@@ -104,6 +104,10 @@ test('Expect feedback form to to be GitHub issue feedback form', async () => {
     category: 'bug',
     onCloseForm: vi.fn(),
     contentChange: vi.fn(),
+    categoryLinks: {
+      bug: '/bug/link',
+      feature: '/feature/link',
+    },
   });
 
   expect(title).toBeInTheDocument();
@@ -116,6 +120,10 @@ test('Expect Preview on GitHub button to be disabled if there is no title or des
     category: 'bug',
     onCloseForm: vi.fn(),
     contentChange: vi.fn(),
+    categoryLinks: {
+      bug: '/bug/link',
+      feature: '/feature/link',
+    },
   });
 
   // default: disabled
@@ -149,6 +157,10 @@ test.each([
     category: category as FeedbackCategory,
     onCloseForm: vi.fn(),
     contentChange: vi.fn(),
+    categoryLinks: {
+      bug: '/bug/link',
+      feature: '/feature/link',
+    },
   });
 
   expect(title).toHaveProperty('placeholder', placeholders.title);
@@ -158,17 +170,21 @@ test.each([
 test.each([
   {
     category: 'bug',
-    link: 'https://github.com/podman-desktop/podman-desktop/issues?q=label%3A%22kind%2Fbug%20%F0%9F%90%9E%22',
+    link: '/bug/link',
   },
   {
     category: 'feature',
-    link: 'https://github.com/podman-desktop/podman-desktop/issues?q=label%3A%22kind%2Ffeature%20%F0%9F%92%A1%22',
+    link: '/feature/link',
   },
 ])('$category should have specific issues link', async ({ category, link }) => {
   const { getByLabelText } = renderGitHubIssueFeedback({
     category: category as FeedbackCategory,
     onCloseForm: vi.fn(),
     contentChange: vi.fn(),
+    categoryLinks: {
+      bug: '/bug/link',
+      feature: '/feature/link',
+    },
   });
 
   const existingIssues = getByLabelText('GitHub issues');
@@ -183,6 +199,10 @@ test.each(['bug', 'feature'])('Expect %s to be included in previewOnGitHub call'
     category: category as FeedbackCategory,
     onCloseForm: vi.fn(),
     contentChange: vi.fn(),
+    categoryLinks: {
+      bug: '/bug/link',
+      feature: '/feature/link',
+    },
   });
 
   // type dummy data
@@ -210,6 +230,10 @@ describe('includeSystemInfo', () => {
       category: 'feature',
       onCloseForm: vi.fn(),
       contentChange: vi.fn(),
+      categoryLinks: {
+        bug: '/bug/link',
+        feature: '/feature/link',
+      },
     });
     expect(includeSystemInfo).toBeUndefined();
   });
@@ -219,6 +243,10 @@ describe('includeSystemInfo', () => {
       category: 'bug',
       onCloseForm: vi.fn(),
       contentChange: vi.fn(),
+      categoryLinks: {
+        bug: '/bug/link',
+        feature: '/feature/link',
+      },
     });
     expect(includeSystemInfo).toBeInTheDocument();
 
@@ -231,6 +259,10 @@ describe('includeSystemInfo', () => {
       category: 'bug',
       onCloseForm: vi.fn(),
       contentChange: vi.fn(),
+      categoryLinks: {
+        bug: '/bug/link',
+        feature: '/feature/link',
+      },
     });
 
     if (!includeSystemInfo) throw new Error('includeSystemInfo should be defined');
@@ -259,6 +291,10 @@ describe('includeExtensionInfo', () => {
       category: 'feature',
       onCloseForm: vi.fn(),
       contentChange: vi.fn(),
+      categoryLinks: {
+        bug: '/bug/link',
+        feature: '/feature/link',
+      },
     });
     expect(includeExtensionInfo).toBeUndefined();
   });
@@ -268,6 +304,10 @@ describe('includeExtensionInfo', () => {
       category: 'bug',
       onCloseForm: vi.fn(),
       contentChange: vi.fn(),
+      categoryLinks: {
+        bug: '/bug/link',
+        feature: '/feature/link',
+      },
     });
     expect(includeExtensionInfo).toBeInTheDocument();
 
@@ -280,6 +320,10 @@ describe('includeExtensionInfo', () => {
       category: 'bug',
       onCloseForm: vi.fn(),
       contentChange: vi.fn(),
+      categoryLinks: {
+        bug: '/bug/link',
+        feature: '/feature/link',
+      },
     });
 
     if (!includeExtensionInfo) throw new Error('includeExtensionInfo should be defined');
@@ -307,6 +351,10 @@ test.each<FeedbackCategory>(['bug', 'feature'])('Expect %s to have specific tele
     category: category,
     onCloseForm: vi.fn(),
     contentChange: vi.fn(),
+    categoryLinks: {
+      bug: '/bug/link',
+      feature: '/feature/link',
+    },
   });
 
   expect(window.telemetryTrack).toHaveBeenNthCalledWith(1, `feedback.FormOpened`, { feedbackCategory: category });
@@ -329,6 +377,10 @@ test.each<FeedbackCategory>([
     category: category,
     onCloseForm: vi.fn(),
     contentChange: vi.fn(),
+    categoryLinks: {
+      bug: '/bug/link',
+      feature: '/feature/link',
+    },
   });
 
   expect(window.telemetryTrack).toHaveBeenNthCalledWith(1, `feedback.FormOpened`, { feedbackCategory: category });
@@ -351,6 +403,10 @@ test('Expect close confirmation to be true if cancel clicked', async () => {
     category: 'bug',
     onCloseForm: closeMock,
     contentChange: vi.fn(),
+    categoryLinks: {
+      bug: '/bug/link',
+      feature: '/feature/link',
+    },
   });
 
   // click on a cancel
@@ -359,4 +415,25 @@ test('Expect close confirmation to be true if cancel clicked', async () => {
   // expect close to have been call with confirmation=true
   expect(closeMock).toHaveBeenCalledOnce();
   expect(closeMock).toHaveBeenCalledWith(true);
+});
+
+test('Expect opening existing GitHub issues to not close the feedback window', async () => {
+  const onCloseFormMock = vi.fn();
+  const { getByLabelText } = renderGitHubIssueFeedback({
+    category: 'bug',
+    onCloseForm: onCloseFormMock,
+    contentChange: vi.fn(),
+    categoryLinks: {
+      bug: '/bug/link',
+      feature: '/feature/link',
+    },
+  });
+
+  const gitHubLink = getByLabelText('GitHub issues');
+  expect(gitHubLink).toBeInTheDocument();
+
+  await userEvent.click(gitHubLink);
+
+  expect(window.openExternal).toHaveBeenCalled();
+  expect(onCloseFormMock).not.toHaveBeenCalled();
 });

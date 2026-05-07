@@ -53,5 +53,11 @@
     "title": "",
     "image": "",
     "summary": ""
-  }
+  },
+  "GitHubFeedbackLinks": {
+    "bug": "https://github.com/openkaiden/kaiden/issues?q=is%3Aissue%20state%3Aopen%20type%3ABug",
+    "feature": "https://github.com/openkaiden/kaiden/issues?q=is%3Aissue%20state%3Aopen%20type%3AFeature",
+    "issues": "https://github.com/openkaiden/kaiden/issues"
+  },
+  "feedbackLinks": {}
 }
