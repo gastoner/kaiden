@@ -324,7 +324,7 @@ describe('create', () => {
 
   test('merges mounts into existing workspace.json preserving other fields', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    vi.mocked(readFile).mockResolvedValue(JSON.stringify({ mcp: { servers: [] } }));
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({ mcp: { servers: [] }, network: { mode: 'allow' } }));
     vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify({ id: 'ws-new' })));
 
     await kdnCli.createWorkspace({
@@ -335,6 +335,7 @@ describe('create', () => {
     const writtenContent = vi.mocked(writeFile).mock.calls[0]![1] as string;
     const parsed = JSON.parse(writtenContent);
     expect(parsed.mcp).toEqual({ servers: [] });
+    expect(parsed.network).toEqual({ mode: 'allow' });
     expect(parsed.mounts).toEqual([{ host: '$HOME', target: '$HOME', ro: false }]);
   });
 

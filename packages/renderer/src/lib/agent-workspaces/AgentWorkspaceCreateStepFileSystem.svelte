@@ -96,7 +96,7 @@ function selectOption(value: string): void {
       <div class="flex flex-col gap-2 mb-3 p-3 rounded-lg bg-[var(--pd-content-card-inset-bg)] border border-[var(--pd-content-card-border)]">
         <div class="flex gap-3 items-center">
           <div class="flex-1 min-w-0">
-            <span class="text-[11px] text-[var(--pd-content-card-text)] opacity-60 mb-1 block">Host path</span>
+            <span class="text-[11px] text-[var(--pd-table-body-text)] mb-1 block">Host path</span>
             <div class="flex gap-2 items-center">
               <Input
                 value={mount.host}
@@ -111,7 +111,7 @@ function selectOption(value: string): void {
         </div>
         <div class="flex gap-3 items-end">
           <div class="flex-1 min-w-0">
-            <span class="text-[11px] text-[var(--pd-content-card-text)] opacity-60 mb-1 block">Target path in workspace</span>
+            <span class="text-[11px] text-[var(--pd-table-body-text)] mb-1 block">Target path in workspace</span>
             <Input
               value={mount.target}
               placeholder="Leave empty to use host path"
@@ -127,7 +127,7 @@ function selectOption(value: string): void {
             {mount.ro ? 'read-only' : 'read-write'}
           </Button>
           {#if customMounts.length > 1}
-            <Button onclick={(): void => onRemoveCustomMount(index)}>Remove</Button>
+            <Button aria-label="Remove mount {index + 1}" onclick={(): void => onRemoveCustomMount(index)}>Remove</Button>
           {/if}
         </div>
       </div>

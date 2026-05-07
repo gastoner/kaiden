@@ -1274,6 +1274,27 @@ test('Expect createAgentWorkspace called with custom mounts when Custom Paths se
   );
 });
 
+test('Expect createAgentWorkspace called with ro:true when read-only toggled for custom mount', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToFileSystemStep();
+  await fireEvent.click(screen.getByRole('radio', { name: 'Use Custom Paths' }));
+
+  await fireEvent.input(screen.getByLabelText('Host path 1'), {
+    target: { value: '/home/user/data' },
+  });
+  await fireEvent.click(screen.getByRole('button', { name: 'Toggle read-only for mount 1' }));
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Start Workspace' }));
+
+  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      mounts: [{ host: '/home/user/data', target: '/home/user/data', ro: true }],
+    }),
+  );
+});
+
 test('Expect custom mount defaults target to host path when target is empty', async () => {
   render(AgentWorkspaceCreate);
 

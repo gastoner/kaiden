@@ -26,7 +26,11 @@ import { providerInfos } from '/@/stores/providers';
 import { ragEnvironments } from '/@/stores/rag-environments';
 import { secretVaultInfos } from '/@/stores/secret-vault';
 import { skillInfos } from '/@/stores/skills';
-import type { AgentWorkspaceConfiguration, AgentWorkspaceMount, NetworkConfiguration } from '/@api/agent-workspace-info';
+import type {
+  AgentWorkspaceConfiguration,
+  AgentWorkspaceMount,
+  NetworkConfiguration,
+} from '/@api/agent-workspace-info';
 import { NavigationPage } from '/@api/navigation-page';
 import type { DefaultWorkspaceSettings } from '/@api/onboarding-settings-info';
 
@@ -351,7 +355,12 @@ function buildMounts(): AgentWorkspaceMount[] | undefined {
     case 'custom': {
       const mounts = customMounts
         .filter(m => m.host.trim() !== '')
-        .map(m => ({ host: m.host, target: m.target.trim() !== '' ? m.target.trim() : m.host, ro: m.ro }));
+        .map(m => {
+          const host = m.host.trim();
+          const trimmedTarget = m.target.trim();
+          const target = trimmedTarget !== '' ? trimmedTarget : host;
+          return { host, target, ro: m.ro };
+        });
       return mounts.length > 0 ? mounts : undefined;
     }
     default:

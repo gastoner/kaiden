@@ -191,7 +191,9 @@ export class KdnCli {
     if (hasSkills) {
       existing.skills = options.skills;
     }
-    existing.network = options.network;
+    if (options.network !== undefined) {
+      existing.network = options.network;
+    }
 
     const wsConfigSecrets = options.workspaceConfiguration?.secrets ?? [];
     const explicitSecrets = options.secrets ?? [];
