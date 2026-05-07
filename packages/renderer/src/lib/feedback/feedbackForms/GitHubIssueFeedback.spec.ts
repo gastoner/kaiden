@@ -23,7 +23,7 @@ import userEvent from '@testing-library/user-event';
 import { type Component, type ComponentProps } from 'svelte';
 import { beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 
-import type { FeedbackCategory } from '/@api/feedback';
+import type { GitHubFeedbackCategory } from '/@api/feedback';
 
 import GitHubIssueFeedback from './GitHubIssueFeedback.svelte';
 
@@ -154,7 +154,7 @@ test.each([
   },
 ])('$category should have specific placeholders', async ({ category, placeholders }) => {
   const { title, description } = renderGitHubIssueFeedback({
-    category: category as FeedbackCategory,
+    category: category as GitHubFeedbackCategory,
     onCloseForm: vi.fn(),
     contentChange: vi.fn(),
     categoryLinks: {
@@ -178,7 +178,7 @@ test.each([
   },
 ])('$category should have specific issues link', async ({ category, link }) => {
   const { getByLabelText } = renderGitHubIssueFeedback({
-    category: category as FeedbackCategory,
+    category: category as GitHubFeedbackCategory,
     onCloseForm: vi.fn(),
     contentChange: vi.fn(),
     categoryLinks: {
@@ -196,7 +196,7 @@ test.each([
 
 test.each(['bug', 'feature'])('Expect %s to be included in previewOnGitHub call', async category => {
   const { preview, title, description } = renderGitHubIssueFeedback({
-    category: category as FeedbackCategory,
+    category: category as GitHubFeedbackCategory,
     onCloseForm: vi.fn(),
     contentChange: vi.fn(),
     categoryLinks: {
@@ -346,7 +346,10 @@ describe('includeExtensionInfo', () => {
   });
 });
 
-test.each<FeedbackCategory>(['bug', 'feature'])('Expect %s to have specific telemetry track events', async category => {
+test.each<GitHubFeedbackCategory>([
+  'bug',
+  'feature',
+])('Expect %s to have specific telemetry track events', async category => {
   const { title, description, preview } = renderGitHubIssueFeedback({
     category: category,
     onCloseForm: vi.fn(),
@@ -368,7 +371,7 @@ test.each<FeedbackCategory>(['bug', 'feature'])('Expect %s to have specific tele
   );
 });
 
-test.each<FeedbackCategory>([
+test.each<GitHubFeedbackCategory>([
   'bug',
   'feature',
 ])('Expect %s to have specific telemetry track events with error if the preview on GitHub fails', async category => {
