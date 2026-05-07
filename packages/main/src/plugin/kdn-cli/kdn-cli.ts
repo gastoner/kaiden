@@ -146,7 +146,8 @@ export class KdnCli {
     const hasSkills = !!options.skills?.length;
     const hasMcp = !!mcpServers?.length || !!mcpCommands?.length;
     const hasWsConfig = !!options.workspaceConfiguration;
-    if (!hasSkills && !options.secrets?.length && !options.network && !hasMcp && !hasWsConfig) {
+    const hasMounts = !!options.mounts?.length;
+    if (!hasSkills && !options.secrets?.length && !options.network && !hasMcp && !hasMounts && !hasWsConfig) {
       return;
     }
 
@@ -197,6 +198,10 @@ export class KdnCli {
     if (explicitSecrets.length > 0 || wsConfigSecrets.length > 0) {
       const mergedSecrets = [...new Set([...explicitSecrets, ...wsConfigSecrets])];
       existing.secrets = mergedSecrets;
+    }
+
+    if (hasMounts) {
+      existing.mounts = options.mounts;
     }
 
     if (hasMcp) {

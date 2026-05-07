@@ -6,7 +6,7 @@ import { onMount } from 'svelte';
 import { toast } from 'svelte-sonner';
 
 import AgentWorkspaceCreateStepAgentModel from '/@/lib/agent-workspaces/AgentWorkspaceCreateStepAgentModel.svelte';
-import type { FileAccessOption } from '/@/lib/agent-workspaces/AgentWorkspaceCreateStepFileSystem.svelte';
+import type { CustomMount, FileAccessOption } from '/@/lib/agent-workspaces/AgentWorkspaceCreateStepFileSystem.svelte';
 import AgentWorkspaceCreateStepFileSystem from '/@/lib/agent-workspaces/AgentWorkspaceCreateStepFileSystem.svelte';
 import type { NetworkAccessOption } from '/@/lib/agent-workspaces/AgentWorkspaceCreateStepNetworking.svelte';
 import AgentWorkspaceCreateStepNetworking from '/@/lib/agent-workspaces/AgentWorkspaceCreateStepNetworking.svelte';
@@ -26,7 +26,7 @@ import { providerInfos } from '/@/stores/providers';
 import { ragEnvironments } from '/@/stores/rag-environments';
 import { secretVaultInfos } from '/@/stores/secret-vault';
 import { skillInfos } from '/@/stores/skills';
-import type { AgentWorkspaceConfiguration, NetworkConfiguration } from '/@api/agent-workspace-info';
+import type { AgentWorkspaceConfiguration, AgentWorkspaceMount, NetworkConfiguration } from '/@api/agent-workspace-info';
 import { NavigationPage } from '/@api/navigation-page';
 import type { DefaultWorkspaceSettings } from '/@api/onboarding-settings-info';
 
@@ -199,7 +199,7 @@ let selectedSkillIds = $derived(skillItems.map(s => s.id));
 let selectedMcpIds = $derived(mcpItems.map(m => m.id));
 let selectedSecretIds = $derived($secretVaultInfos.map(s => s.id));
 let selectedKnowledgeIds = $derived(knowledgeItems.map(k => k.id));
-let customPaths = $state<string[]>(['']);
+let customMounts = $state<CustomMount[]>([{ host: '', target: '', ro: false }]);
 let hostsByMode = $state<Record<string, string[]>>({
   registries: [...REGISTRY_HOSTS],
   blocked: [''],
@@ -243,17 +243,17 @@ function handleStepClick(index: number): void {
   currentStepIndex = index;
 }
 
-function addCustomPath(): void {
-  customPaths = [...customPaths, ''];
+function addCustomMount(): void {
+  customMounts = [...customMounts, { host: '', target: '', ro: false }];
 }
 
-function removeCustomPath(index: number): void {
-  if (customPaths.length <= 1) return;
-  customPaths = customPaths.filter((_, i) => i !== index);
+function removeCustomMount(index: number): void {
+  if (customMounts.length <= 1) return;
+  customMounts = customMounts.filter((_, i) => i !== index);
 }
 
-function updateCustomPath(index: number, value: string): void {
-  customPaths = customPaths.map((p, i) => (i === index ? value : p));
+function updateCustomMount(index: number, field: keyof CustomMount, value: string | boolean): void {
+  customMounts = customMounts.map((m, i) => (i === index ? { ...m, [field]: value } : m));
 }
 
 function addCustomHost(): void {
@@ -276,7 +276,7 @@ async function handleBrowseCustomPath(index: number): Promise<void> {
   try {
     const result = await window.openDialog({ title: 'Select a directory', selectors: ['openDirectory'] });
     const selected = result?.[0];
-    if (selected) updateCustomPath(index, selected);
+    if (selected) updateCustomMount(index, 'host', selected);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     error = message;
@@ -342,6 +342,23 @@ function getFirstCompatibleModel(): ModelInfo | undefined {
   return compatible[0];
 }
 
+function buildMounts(): AgentWorkspaceMount[] | undefined {
+  switch (selectedFileAccess) {
+    case 'home':
+      return [{ host: '$HOME', target: '$HOME', ro: false }];
+    case 'full':
+      return [{ host: '/', target: '/', ro: false }];
+    case 'custom': {
+      const mounts = customMounts
+        .filter(m => m.host.trim() !== '')
+        .map(m => ({ host: m.host, target: m.target.trim() !== '' ? m.target.trim() : m.host, ro: m.ro }));
+      return mounts.length > 0 ? mounts : undefined;
+    }
+    default:
+      return undefined;
+  }
+}
+
 async function startWorkspace(): Promise<void> {
   if (!sessionName.trim() || !sourcePath.trim()) return;
 
@@ -350,6 +367,7 @@ async function startWorkspace(): Promise<void> {
   try {
     const selectedSkillPaths = $skillInfos.filter(s => selectedSkillIds.includes(s.name)).map(s => s.path);
     const network = mapNetworkSelection(selectedNetwork, customHosts);
+    const mounts = buildMounts();
 
     const agentDef = agentDefinitions.find(d => d.cliName === selectedAgent);
 
@@ -375,6 +393,7 @@ async function startWorkspace(): Promise<void> {
       skills: selectedSkillPaths.length > 0 ? selectedSkillPaths : undefined,
       network,
       secrets: selectedSecretIds.length > 0 ? [...selectedSecretIds] : undefined,
+      mounts,
       mcp: hasMcp
         ? {
             ...(remoteServers.length > 0 ? { servers: remoteServers } : {}),
@@ -434,11 +453,11 @@ async function startWorkspace(): Promise<void> {
               <AgentWorkspaceCreateStepFileSystem
                 {fileAccessOptions}
                 bind:selectedFileAccess
-                {customPaths}
+                {customMounts}
                 onBrowseCustomPath={handleBrowseCustomPath}
-                onAddCustomPath={addCustomPath}
-                onRemoveCustomPath={removeCustomPath}
-                onUpdateCustomPath={updateCustomPath} />
+                onAddCustomMount={addCustomMount}
+                onRemoveCustomMount={removeCustomMount}
+                onUpdateCustomMount={updateCustomMount} />
             {:else if currentStepId === 'networking'}
               <AgentWorkspaceCreateStepNetworking
                 {networkOptions}

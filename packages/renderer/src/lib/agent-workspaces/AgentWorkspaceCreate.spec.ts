@@ -216,7 +216,7 @@ test('Expect Start Workspace button visible on last step', async () => {
   expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
 });
 
-test('Expect custom paths section shown when Custom Paths selected on filesystem step', async () => {
+test('Expect custom mounts section shown when Custom Paths selected on filesystem step', async () => {
   render(AgentWorkspaceCreate);
 
   await fireEvent.input(screen.getByPlaceholderText('/path/to/project'), {
@@ -229,8 +229,9 @@ test('Expect custom paths section shown when Custom Paths selected on filesystem
 
   await fireEvent.click(screen.getByRole('radio', { name: 'Use Custom Paths' }));
 
-  expect(screen.getByPlaceholderText('/path/to/allowed/directory')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Add Another Path' })).toBeInTheDocument();
+  expect(screen.getByPlaceholderText('/path/on/host')).toBeInTheDocument();
+  expect(screen.getByPlaceholderText('Leave empty to use host path')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Add Another Mount' })).toBeInTheDocument();
 });
 
 async function navigateToToolsSecretsStep(): Promise<void> {
@@ -1191,6 +1192,104 @@ test('Expect tilde mount paths normalized to $HOME in workspaceConfiguration', a
           },
         ],
       },
+    }),
+  );
+});
+
+async function navigateToFileSystemStep(): Promise<void> {
+  await fireEvent.input(screen.getByPlaceholderText('/path/to/project'), {
+    target: { value: '/home/user/my-repo' },
+  });
+  // Workspace → Agent & Model → Tools & Secrets → File System
+  for (let i = 0; i < 3; i++) {
+    await fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  }
+}
+
+test('Expect createAgentWorkspace called without mounts when workspace (default) file access selected', async () => {
+  render(AgentWorkspaceCreate);
+
+  await fireEvent.input(screen.getByPlaceholderText('/path/to/project'), {
+    target: { value: '/home/user/my-repo' },
+  });
+  await fireEvent.click(screen.getByRole('button', { name: 'Use all defaults and create workspace' }));
+
+  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      mounts: undefined,
+    }),
+  );
+});
+
+test('Expect createAgentWorkspace called with home mount when Home Directory selected', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToFileSystemStep();
+  await fireEvent.click(screen.getByRole('radio', { name: 'Use Home Directory' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Start Workspace' }));
+
+  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      mounts: [{ host: '$HOME', target: '$HOME', ro: false }],
+    }),
+  );
+});
+
+test('Expect createAgentWorkspace called with full mount when Full System Access selected', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToFileSystemStep();
+  await fireEvent.click(screen.getByRole('radio', { name: 'Use Full System Access' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Start Workspace' }));
+
+  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      mounts: [{ host: '/', target: '/', ro: false }],
+    }),
+  );
+});
+
+test('Expect createAgentWorkspace called with custom mounts when Custom Paths selected', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToFileSystemStep();
+  await fireEvent.click(screen.getByRole('radio', { name: 'Use Custom Paths' }));
+
+  await fireEvent.input(screen.getByLabelText('Host path 1'), {
+    target: { value: '/home/user/data' },
+  });
+  await fireEvent.input(screen.getByLabelText('Target path 1'), {
+    target: { value: '/workspace/data' },
+  });
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Start Workspace' }));
+
+  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      mounts: [{ host: '/home/user/data', target: '/workspace/data', ro: false }],
+    }),
+  );
+});
+
+test('Expect custom mount defaults target to host path when target is empty', async () => {
+  render(AgentWorkspaceCreate);
+
+  await navigateToFileSystemStep();
+  await fireEvent.click(screen.getByRole('radio', { name: 'Use Custom Paths' }));
+
+  await fireEvent.input(screen.getByLabelText('Host path 1'), {
+    target: { value: '/home/user/configs' },
+  });
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Start Workspace' }));
+
+  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      mounts: [{ host: '/home/user/configs', target: '/home/user/configs', ro: false }],
     }),
   );
 });

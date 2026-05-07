@@ -290,13 +290,52 @@ describe('create', () => {
     expect(exec.exec).toHaveBeenCalled();
   });
 
-  test('does not write workspace.json when no skills, network, secrets, mcp, or workspaceConfiguration provided', async () => {
+  test('does not write workspace.json when no skills, network, secrets, mcp, mounts provided or workspaceConfiguration provided', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
     vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify({ id: 'ws-new' })));
 
     await kdnCli.createWorkspace(defaultOptions);
 
     expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  test('writes workspace.json with mounts before calling kdn init', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(readFile).mockRejectedValue(mockEnoent());
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify({ id: 'ws-new' })));
+
+    await kdnCli.createWorkspace({
+      ...defaultOptions,
+      mounts: [
+        { host: '/home/user/data', target: '/workspace/data', ro: false },
+        { host: '$HOME/.gitconfig', target: '$HOME/.gitconfig', ro: true },
+      ],
+    });
+
+    expect(mkdir).toHaveBeenCalledWith(join('/tmp/my-project', '.kaiden'), { recursive: true });
+    const writtenContent = vi.mocked(writeFile).mock.calls[0]![1] as string;
+    const parsed = JSON.parse(writtenContent);
+    expect(parsed.mounts).toEqual([
+      { host: '/home/user/data', target: '/workspace/data', ro: false },
+      { host: '$HOME/.gitconfig', target: '$HOME/.gitconfig', ro: true },
+    ]);
+    expect(exec.exec).toHaveBeenCalled();
+  });
+
+  test('merges mounts into existing workspace.json preserving other fields', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({ mcp: { servers: [] } }));
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify({ id: 'ws-new' })));
+
+    await kdnCli.createWorkspace({
+      ...defaultOptions,
+      mounts: [{ host: '$HOME', target: '$HOME', ro: false }],
+    });
+
+    const writtenContent = vi.mocked(writeFile).mock.calls[0]![1] as string;
+    const parsed = JSON.parse(writtenContent);
+    expect(parsed.mcp).toEqual({ servers: [] });
+    expect(parsed.mounts).toEqual([{ host: '$HOME', target: '$HOME', ro: false }]);
   });
 
   test('merges network into existing workspace.json', async () => {

@@ -56,6 +56,8 @@ export type AgentWorkspaceMcpCommandServer = configComponents['schemas']['McpCom
 
 export type AgentWorkspaceMcpConfig = configComponents['schemas']['McpConfiguration'];
 
+export type AgentWorkspaceMount = configComponents['schemas']['Mount'];
+
 /**
  * Options for creating (initializing) a new workspace via `kdn init`.
  */
@@ -71,4 +73,5 @@ export interface AgentWorkspaceCreateOptions {
   secrets?: string[];
   mcp?: AgentWorkspaceMcpConfig;
   workspaceConfiguration?: AgentWorkspaceConfiguration;
+  mounts?: AgentWorkspaceMount[];
 }

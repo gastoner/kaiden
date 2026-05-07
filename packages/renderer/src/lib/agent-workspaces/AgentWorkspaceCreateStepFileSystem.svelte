@@ -12,24 +12,30 @@ export interface FileAccessOption {
   badge?: string;
 }
 
+export interface CustomMount {
+  host: string;
+  target: string;
+  ro: boolean;
+}
+
 interface Props {
   fileAccessOptions: FileAccessOption[];
   selectedFileAccess: string;
-  customPaths: string[];
+  customMounts: CustomMount[];
   onBrowseCustomPath: (index: number) => Promise<void>;
-  onAddCustomPath: () => void;
-  onRemoveCustomPath: (index: number) => void;
-  onUpdateCustomPath: (index: number, value: string) => void;
+  onAddCustomMount: () => void;
+  onRemoveCustomMount: (index: number) => void;
+  onUpdateCustomMount: (index: number, field: keyof CustomMount, value: string | boolean) => void;
 }
 
 let {
   fileAccessOptions,
   selectedFileAccess = $bindable(),
-  customPaths,
+  customMounts,
   onBrowseCustomPath,
-  onAddCustomPath,
-  onRemoveCustomPath,
-  onUpdateCustomPath,
+  onAddCustomMount,
+  onRemoveCustomMount,
+  onUpdateCustomMount,
 }: Props = $props();
 
 function selectOption(value: string): void {
@@ -85,21 +91,47 @@ function selectOption(value: string): void {
 
 {#if selectedFileAccess === 'custom'}
   <div class="mt-4 p-4 rounded-xl border border-[var(--pd-content-card-border)] bg-[var(--pd-content-card-bg)]">
-    <p class="text-xs text-[var(--pd-content-card-text)] opacity-70 mb-3">Allowed paths for custom access. You can refine paths later in project or workspace settings.</p>
-    {#each customPaths as path, index (index)}
-      <div class="flex gap-3 mb-2 items-center">
-        <Input
-          value={path}
-          placeholder="/path/to/allowed/directory"
-          class="flex-1 font-mono text-sm"
-          oninput={(e: Event): void => onUpdateCustomPath(index, (e.target as HTMLInputElement).value)}
-        />
-        <Button onclick={(): Promise<void> => onBrowseCustomPath(index)} aria-label="Browse for directory" icon={faFolderOpen} />
-        {#if customPaths.length > 1}
-          <Button class="text-red-400" onclick={(): void => onRemoveCustomPath(index)}>Remove</Button>
-        {/if}
+    <p class="text-xs text-[var(--pd-content-card-text)] opacity-70 mb-3">Mount host directories into the workspace. Target is optional (defaults to the host path).</p>
+    {#each customMounts as mount, index (index)}
+      <div class="flex flex-col gap-2 mb-3 p-3 rounded-lg bg-[var(--pd-content-card-inset-bg)] border border-[var(--pd-content-card-border)]">
+        <div class="flex gap-3 items-center">
+          <div class="flex-1 min-w-0">
+            <span class="text-[11px] text-[var(--pd-content-card-text)] opacity-60 mb-1 block">Host path</span>
+            <div class="flex gap-2 items-center">
+              <Input
+                value={mount.host}
+                placeholder="/path/on/host"
+                class="flex-1 font-mono text-sm"
+                aria-label="Host path {index + 1}"
+                oninput={(e: Event): void => onUpdateCustomMount(index, 'host', (e.target as HTMLInputElement).value)}
+              />
+              <Button onclick={(): Promise<void> => onBrowseCustomPath(index)} aria-label="Browse for directory" icon={faFolderOpen} />
+            </div>
+          </div>
+        </div>
+        <div class="flex gap-3 items-end">
+          <div class="flex-1 min-w-0">
+            <span class="text-[11px] text-[var(--pd-content-card-text)] opacity-60 mb-1 block">Target path in workspace</span>
+            <Input
+              value={mount.target}
+              placeholder="Leave empty to use host path"
+              class="flex-1 font-mono text-sm"
+              aria-label="Target path {index + 1}"
+              oninput={(e: Event): void => onUpdateCustomMount(index, 'target', (e.target as HTMLInputElement).value)}
+            />
+          </div>
+          <Button
+            type="secondary"
+            aria-label="Toggle read-only for mount {index + 1}"
+            onclick={(): void => onUpdateCustomMount(index, 'ro', !mount.ro)}>
+            {mount.ro ? 'read-only' : 'read-write'}
+          </Button>
+          {#if customMounts.length > 1}
+            <Button onclick={(): void => onRemoveCustomMount(index)}>Remove</Button>
+          {/if}
+        </div>
       </div>
     {/each}
-    <Button class="mt-2" icon={faPlus} onclick={onAddCustomPath}>Add Another Path</Button>
+    <Button class="mt-2" icon={faPlus} onclick={onAddCustomMount}>Add Another Mount</Button>
   </div>
 {/if}
