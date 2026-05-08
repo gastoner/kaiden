@@ -55,8 +55,8 @@ export class AgentWorkspaceCreatePage extends BasePage {
     this.customizeExpandable = this.page.getByText('Customize skills, MCP servers, vault, and knowledges');
     this.mcpServersPanel = this.page.getByText('MCP Servers', { exact: true });
     this.fileAccessHeading = this.page.getByText('File System Access');
-    this.firstCustomPathInput = this.page.getByPlaceholder('/path/to/allowed/directory').first();
-    this.addPathButton = this.page.getByRole('button', { name: 'Add Another Path' });
+    this.firstCustomPathInput = this.page.getByPlaceholder('/path/on/host').first();
+    this.addPathButton = this.page.getByRole('button', { name: 'Add Another Mount' });
     this.wizardStepper = this.page.getByLabel('Wizard progress');
     this.cancelButton = this.page.getByRole('button', { name: 'Cancel' });
     this.continueButton = this.page.getByRole('button', { name: 'Continue' });
