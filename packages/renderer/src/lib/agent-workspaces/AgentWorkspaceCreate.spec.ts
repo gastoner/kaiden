@@ -23,6 +23,7 @@ import userEvent from '@testing-library/user-event';
 import { writable } from 'svelte/store';
 import { beforeEach, expect, test, vi } from 'vitest';
 
+import { resetDraft, wizard } from '/@/stores/agent-workspace-create-draft.svelte';
 import * as agentWorkspaceRuntimeStore from '/@/stores/agentworkspace-runtime';
 import * as mcpStore from '/@/stores/mcp-remote-servers';
 import * as modelCatalogStore from '/@/stores/model-catalog';
@@ -69,6 +70,7 @@ beforeEach(() => {
     (providerId: string, label: string): string => `${providerId}::${label}`,
   );
   vi.mocked(window.checkAgentWorkspaceConfigExists).mockResolvedValue(false);
+  resetDraft();
 });
 
 test('Expect page title displayed', () => {
@@ -477,6 +479,7 @@ test('Expect createAgentWorkspace called with skill paths', async () => {
       managed: true,
     },
   ]);
+  wizard.draft.selectedSkillIds = ['kubernetes', 'code-review'];
 
   render(AgentWorkspaceCreate);
 
@@ -522,6 +525,7 @@ test('Expect createAgentWorkspace called with secret ids when vault has entries'
       description: 'API key',
     },
   ]);
+  wizard.draft.selectedSecretIds = ['github-token', 'anthropic-key'];
 
   render(AgentWorkspaceCreate);
 
@@ -961,6 +965,7 @@ test('Expect createAgentWorkspace splits MCP servers into remote and command ent
       tools: {},
     },
   ]);
+  wizard.draft.selectedMcpIds = ['mcp-remote', 'mcp-pkg'];
 
   render(AgentWorkspaceCreate);
 
