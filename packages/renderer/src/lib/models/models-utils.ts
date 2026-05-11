@@ -17,6 +17,7 @@ export interface InferenceConnectionSummary {
   status: ProviderConnectionStatus | 'not-configured';
   modelCount: number;
   creationDisplayName: string;
+  configurable: boolean;
 }
 
 export function getModels(providerInfos: ProviderInfo[]): ModelInfo[] {
@@ -107,6 +108,7 @@ export function getInferenceConnectionSummaries(providerInfos: ProviderInfo[]): 
         status: representative.status,
         modelCount: totalModels,
         creationDisplayName,
+        configurable: provider.inferenceProviderConnectionCreation,
       });
     }
 
@@ -120,6 +122,7 @@ export function getInferenceConnectionSummaries(providerInfos: ProviderInfo[]): 
         status: 'not-configured',
         modelCount: 0,
         creationDisplayName,
+        configurable: provider.inferenceProviderConnectionCreation,
       });
     }
   }

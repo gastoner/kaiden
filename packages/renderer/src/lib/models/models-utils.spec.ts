@@ -114,6 +114,7 @@ test('getInferenceConnectionSummaries returns one summary per provider with aggr
     id: 'openai',
     name: 'OpenAI',
     internalId: 'internal-1',
+    inferenceProviderConnectionCreation: true,
     inferenceConnections: [
       { name: 'conn-1', type: 'cloud', status: 'started', models: [{ label: 'gpt-4' }, { label: 'gpt-3.5' }] },
       { name: 'conn-2', type: 'self-hosted', status: 'stopped', models: [{ label: 'custom-model' }] },
@@ -131,6 +132,7 @@ test('getInferenceConnectionSummaries returns one summary per provider with aggr
     status: 'started',
     modelCount: 3,
     creationDisplayName: 'OpenAI',
+    configurable: true,
   });
 });
 
@@ -165,6 +167,7 @@ test('getInferenceConnectionSummaries emits not-configured entry when creation i
     modelCount: 0,
     creationDisplayName: 'OpenAI (Hosted)',
     connectionType: 'cloud',
+    configurable: true,
   });
 });
 
@@ -363,4 +366,18 @@ test('getInHouseConnectionSummaries returns empty when no self-hosted providers'
   ] as unknown as ProviderInfo[];
 
   expect(getInHouseConnectionSummaries(providers)).toEqual([]);
+});
+
+test('getInferenceConnectionSummaries sets configurable false for providers without factory', () => {
+  const provider = {
+    id: 'ollama',
+    name: 'Ollama',
+    internalId: 'ollama-internal',
+    inferenceProviderConnectionCreation: false,
+    inferenceConnections: [{ name: 'ollama', type: 'local', status: 'started', models: [{ label: 'phi-3' }] }],
+  } as unknown as ProviderInfo;
+
+  const result = getInferenceConnectionSummaries([provider]);
+  expect(result).toHaveLength(1);
+  expect(result[0].configurable).toBe(false);
 });

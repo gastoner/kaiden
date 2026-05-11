@@ -94,12 +94,14 @@ function getSecondBadge(status: string): BadgeInfo | undefined {
           </span>
         {/if}
       </div>
-      <button
-        class="text-xs font-semibold text-[var(--pd-link)] hover:text-[var(--pd-link-hover)] mt-auto pt-2 self-start"
-        aria-label={`Configure ${connection.providerName}`}
-        onclick={(): void => configure(connection)}>
-        Configure
-      </button>
+      {#if connection.configurable}
+        <button
+          class="text-xs font-semibold text-[var(--pd-link)] hover:text-[var(--pd-link-hover)] mt-auto pt-2 self-start"
+          aria-label={`Configure ${connection.providerName}`}
+          onclick={(): void => configure(connection)}>
+          Configure
+        </button>
+      {/if}
     </div>
   {/each}
 </div>
