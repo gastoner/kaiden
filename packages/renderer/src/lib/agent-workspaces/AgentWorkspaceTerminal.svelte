@@ -35,7 +35,7 @@ let shellTerminal: Terminal;
 let currentRouterPath: string;
 let sendCallbackId: number | undefined;
 let serializeAddon: SerializeAddon;
-let handleResize: (() => void) | undefined;
+let fitAddon: FitAddon;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 let onDataDisposable: IDisposable | undefined;
 let reconnecting = false;
@@ -88,6 +88,7 @@ async function restartTerminal(): Promise<void> {
   try {
     clearReconnectTimer();
     await executeShellInWorkspace();
+    window.dispatchEvent(new Event('resize'));
   } finally {
     reconnecting = false;
   }
@@ -117,6 +118,17 @@ $effect(() => {
 router.subscribe(route => {
   currentRouterPath = route.path;
 });
+
+function handleResize(): void {
+  if (currentRouterPath.includes(`/agent-workspaces/${encodeURIComponent(workspaceId)}/terminal`)) {
+    fitAddon.fit();
+    if (sendCallbackId) {
+      window
+        .shellInAgentWorkspaceResize(sendCallbackId, shellTerminal.cols, shellTerminal.rows)
+        ?.catch((err: unknown) => console.error(`Error resizing terminal for workspace ${workspaceId}`, err));
+    }
+  }
+}
 
 function createDataCallback(): (data: string) => void {
   return (data: string) => {
@@ -200,25 +212,14 @@ async function refreshTerminal(): Promise<void> {
     shellTerminal.write(existingTerminal.terminal);
   }
 
-  const fitAddon = new FitAddon();
+  fitAddon = new FitAddon();
   serializeAddon = new SerializeAddon();
   shellTerminal.loadAddon(fitAddon);
   shellTerminal.loadAddon(serializeAddon);
 
   shellTerminal.open(terminalXtermDiv);
-
-  handleResize = (): void => {
-    if (currentRouterPath.includes(`/agent-workspaces/${encodeURIComponent(workspaceId)}/terminal`)) {
-      fitAddon.fit();
-      if (sendCallbackId) {
-        window
-          .shellInAgentWorkspaceResize(sendCallbackId, shellTerminal.cols, shellTerminal.rows)
-          .catch((err: unknown) => console.error(`Error resizing terminal for workspace ${workspaceId}`, err));
-      }
-    }
-  };
-  window.addEventListener('resize', handleResize);
   fitAddon.fit();
+  window.dispatchEvent(new Event('resize'));
 }
 
 onMount(async () => {
@@ -226,14 +227,13 @@ onMount(async () => {
   reconnectExhausted = false;
   reconnectCount = 0;
   await refreshTerminal();
+  window.addEventListener('resize', handleResize);
   await executeShellInWorkspace();
 });
 
 onDestroy(() => {
   clearReconnectTimer();
-  if (handleResize) {
-    window.removeEventListener('resize', handleResize);
-  }
+  window.removeEventListener('resize', handleResize);
   onDataDisposable?.dispose();
   const terminalContent = serializeAddon?.serialize() ?? '';
   registerTerminal({ workspaceId, callbackId: sendCallbackId, terminal: terminalContent });

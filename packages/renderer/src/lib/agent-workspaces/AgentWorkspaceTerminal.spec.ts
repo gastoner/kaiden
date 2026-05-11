@@ -70,6 +70,22 @@ beforeEach(() => {
   agentWorkspaces.set([]);
 });
 
+test('opens shell and refits terminal when workspace transitions from starting to running', async () => {
+  agentWorkspaces.set([{ ...workspace, state: 'starting' }]);
+
+  const sendCallbackId = 42;
+  shellInAgentWorkspaceMock.mockResolvedValue(sendCallbackId);
+
+  render(AgentWorkspaceTerminal, { workspaceId: 'ws-1', screenReaderMode: true });
+
+  expect(shellInAgentWorkspaceMock).not.toHaveBeenCalled();
+
+  agentWorkspaces.set([{ ...workspace, state: 'running' }]);
+
+  await waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(window.shellInAgentWorkspaceResize).toHaveBeenCalled());
+});
+
 test('shows empty screen when workspace is not running', async () => {
   render(AgentWorkspaceTerminal, { workspaceId: 'ws-1', screenReaderMode: true });
 
@@ -164,7 +180,7 @@ test('receiveEndCallback reconnects when shell ends while workspace is running',
   onEndCallback();
   await waitFor(() => expect(shellInAgentWorkspaceMock).toHaveBeenCalledTimes(2));
 
-  expect(window.shellInAgentWorkspaceResize).toHaveBeenCalledTimes(2);
+  expect(window.shellInAgentWorkspaceResize).toHaveBeenCalledTimes(3);
 });
 
 test('receiveEndCallback schedules reconnect when workspace is not running', async () => {
