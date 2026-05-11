@@ -389,6 +389,65 @@ test.each([
   expect(screen.queryByText(unexpectedGroup)).not.toBeInTheDocument();
 });
 
+test('Expect disabled skills excluded from wizard checklist', async () => {
+  vi.mocked(skillsStore).skillInfos = writable<SkillInfo[]>([
+    {
+      name: 'kubernetes',
+      description: 'Deploy & manage clusters',
+      path: '/skills/kubernetes',
+      enabled: true,
+      managed: false,
+    },
+    {
+      name: 'code-review',
+      description: 'Analyze code quality & security',
+      path: '/skills/code-review',
+      enabled: false,
+      managed: true,
+    },
+  ]);
+
+  render(AgentWorkspaceCreate);
+
+  await navigateToToolsSecretsStep();
+  await expandCustomize();
+
+  expect(screen.getByText('kubernetes')).toBeInTheDocument();
+  expect(screen.queryByText('code-review')).not.toBeInTheDocument();
+});
+
+test('Expect createAgentWorkspace excludes disabled skill paths', async () => {
+  vi.mocked(skillsStore).skillInfos = writable<SkillInfo[]>([
+    {
+      name: 'kubernetes',
+      description: 'Deploy & manage clusters',
+      path: '/home/user/.kaiden/skills/kubernetes',
+      enabled: true,
+      managed: false,
+    },
+    {
+      name: 'code-review',
+      description: 'Analyze code quality',
+      path: '/home/user/.kaiden/skills/code-review',
+      enabled: false,
+      managed: true,
+    },
+  ]);
+
+  render(AgentWorkspaceCreate);
+
+  await fireEvent.input(screen.getByPlaceholderText('/path/to/project'), {
+    target: { value: '/home/user/my-repo' },
+  });
+  await fireEvent.click(screen.getByRole('button', { name: 'Use all defaults and create workspace' }));
+
+  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+    expect.objectContaining({
+      skills: ['/home/user/.kaiden/skills/kubernetes'],
+    }),
+  );
+});
+
 test('Expect Manage Skills button navigates to skills page', async () => {
   const { handleNavigation } = await import('/@/navigation');
 

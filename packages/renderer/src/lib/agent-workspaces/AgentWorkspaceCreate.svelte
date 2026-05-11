@@ -133,12 +133,14 @@ const wizardSteps = [
 ];
 
 let skillItems: ChecklistItem[] = $derived(
-  $skillInfos.map(s => ({
-    id: s.name,
-    name: s.name,
-    description: s.description,
-    group: s.managed ? 'Custom' : 'Pre-built',
-  })),
+  $skillInfos
+    .filter(s => s.enabled)
+    .map(s => ({
+      id: s.name,
+      name: s.name,
+      description: s.description,
+      group: s.managed ? 'Custom' : 'Pre-built',
+    })),
 );
 let mcpItems: ChecklistItem[] = $derived(
   $mcpRemoteServerInfos.map(m => ({ id: m.id, name: m.name, description: m.description })),
