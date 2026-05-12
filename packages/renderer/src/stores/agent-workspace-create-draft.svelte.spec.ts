@@ -160,7 +160,25 @@ describe('resetDraft selects all available items', () => {
   });
 });
 
-describe('store subscriptions', () => {
+describe('first emission seeding', () => {
+  test('should seed selections from pre-populated stores on first emission after reset', () => {
+    skillInfos.set([
+      { name: 'k8s', description: '', path: '', enabled: true, managed: false },
+      { name: 'docker', description: '', path: '', enabled: true, managed: false },
+    ]);
+    mcpRemoteServerInfos.set([{ id: 'srv-1', name: 'Server 1' } as MCPRemoteServerInfo]);
+    secretVaultInfos.set([{ id: 'sec-1', name: 'Secret 1', type: 'api', description: '' } as SecretVaultInfo]);
+    ragEnvironments.set([{ name: 'kb-1', mcpServer: { id: 'mcp-1' } } as unknown as RagEnvironment]);
+
+    expect(wizard.draft.selectedSkillIds).toContain('k8s');
+    expect(wizard.draft.selectedSkillIds).toContain('docker');
+    expect(wizard.draft.selectedMcpIds).toContain('srv-1');
+    expect(wizard.draft.selectedSecretIds).toContain('sec-1');
+    expect(wizard.draft.selectedKnowledgeIds).toContain('kb-1');
+  });
+});
+
+describe('selection syncing from subscriptions', () => {
   test('should remove skills no longer available', () => {
     skillInfos.set([
       { name: 'k8s', description: '', path: '', enabled: true, managed: false },

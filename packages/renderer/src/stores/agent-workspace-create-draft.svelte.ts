@@ -93,7 +93,7 @@ export function resetDraft(): void {
 let prevSkills: Set<string> | undefined;
 skillInfos.subscribe(skills => {
   const available = new Set(skills.filter(s => s.enabled).map(s => s.name));
-  const added = prevSkills ? [...available].filter(id => !prevSkills!.has(id)) : [];
+  const added = prevSkills ? [...available].filter(id => !prevSkills!.has(id)) : [...available];
   wizard.draft.selectedSkillIds = [...wizard.draft.selectedSkillIds.filter(id => available.has(id)), ...added];
   prevSkills = available;
 });
@@ -101,7 +101,7 @@ skillInfos.subscribe(skills => {
 let prevMcp: Set<string> | undefined;
 mcpRemoteServerInfos.subscribe(servers => {
   const available = new Set(servers.map(m => m.id));
-  const added = prevMcp ? [...available].filter(id => !prevMcp!.has(id)) : [];
+  const added = prevMcp ? [...available].filter(id => !prevMcp!.has(id)) : [...available];
   wizard.draft.selectedMcpIds = [...wizard.draft.selectedMcpIds.filter(id => available.has(id)), ...added];
   prevMcp = available;
 });
@@ -109,7 +109,7 @@ mcpRemoteServerInfos.subscribe(servers => {
 let prevSecrets: Set<string> | undefined;
 secretVaultInfos.subscribe(secrets => {
   const available = new Set(secrets.map(s => s.id));
-  const added = prevSecrets ? [...available].filter(id => !prevSecrets!.has(id)) : [];
+  const added = prevSecrets ? [...available].filter(id => !prevSecrets!.has(id)) : [...available];
   wizard.draft.selectedSecretIds = [...wizard.draft.selectedSecretIds.filter(id => available.has(id)), ...added];
   prevSecrets = available;
 });
@@ -117,7 +117,7 @@ secretVaultInfos.subscribe(secrets => {
 let prevKnowledge: Set<string> | undefined;
 ragEnvironments.subscribe(envs => {
   const available = new Set(envs.filter(r => r.mcpServer).map(r => r.name));
-  const added = prevKnowledge ? [...available].filter(id => !prevKnowledge!.has(id)) : [];
+  const added = prevKnowledge ? [...available].filter(id => !prevKnowledge!.has(id)) : [...available];
   wizard.draft.selectedKnowledgeIds = [...wizard.draft.selectedKnowledgeIds.filter(id => available.has(id)), ...added];
   prevKnowledge = available;
 });

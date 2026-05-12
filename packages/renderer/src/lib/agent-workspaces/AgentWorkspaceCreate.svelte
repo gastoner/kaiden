@@ -209,16 +209,23 @@ $effect(() => {
   if (last) wizard.draft.sessionName = last;
 });
 
+let configCheckToken = 0;
+
 $effect(() => {
   const trimmed = wizard.draft.sourcePath.trim();
+  const token = ++configCheckToken;
   if (trimmed) {
     window
       .checkAgentWorkspaceConfigExists(trimmed)
       .then(exists => {
-        wizard.draft.configExists = exists;
+        if (token === configCheckToken) {
+          wizard.draft.configExists = exists;
+        }
       })
       .catch(() => {
-        wizard.draft.configExists = false;
+        if (token === configCheckToken) {
+          wizard.draft.configExists = false;
+        }
       });
   } else {
     wizard.draft.configExists = false;
@@ -383,8 +390,6 @@ async function startAsIs(): Promise<void> {
   if (!wizard.draft.sourcePath.trim()) return;
 
   const draftSnapshot = $state.snapshot(wizard.draft);
-  resetDraft();
-  handleNavigation({ page: NavigationPage.AGENT_WORKSPACES });
 
   try {
     const agentDef = agentDefinitions.find(d => d.cliName === draftSnapshot.selectedAgent);
@@ -394,14 +399,19 @@ async function startAsIs(): Promise<void> {
       agent: agentDef?.cliAgent ?? draftSnapshot.selectedAgent,
       name: draftSnapshot.sessionName || getDefaultSessionName(draftSnapshot.sourcePath),
     });
+    resetDraft();
   } catch (err: unknown) {
     console.error('Failed to create agent workspace (as-is)', err);
-    await window.showMessageBox({
-      title: 'Agent Workspace',
-      type: 'error',
-      message: `Error while creating workspace: ${err instanceof Error ? err.message : String(err)}`,
-      buttons: ['OK'],
-    });
+    window
+      .showMessageBox({
+        title: 'Agent Workspace',
+        type: 'error',
+        message: `Error while creating workspace: ${err instanceof Error ? err.message : String(err)}`,
+        buttons: ['OK'],
+      })
+      .catch(console.error);
+  } finally {
+    handleNavigation({ page: NavigationPage.AGENT_WORKSPACES });
   }
 }
 
@@ -409,8 +419,6 @@ async function startWorkspace(): Promise<void> {
   if (!wizard.draft.sessionName.trim() || !wizard.draft.sourcePath.trim()) return;
 
   const draftSnapshot = $state.snapshot(wizard.draft);
-  resetDraft();
-  handleNavigation({ page: NavigationPage.AGENT_WORKSPACES });
 
   try {
     const selectedSkillPaths = $skillInfos
@@ -457,14 +465,19 @@ async function startWorkspace(): Promise<void> {
       workspaceConfiguration: getAgentWorkspaceConfiguration(draftSnapshot.selectedAgent),
       replaceConfig: draftSnapshot.configExists && draftSnapshot.configAction === 'replace' ? true : undefined,
     });
+    resetDraft();
   } catch (err: unknown) {
     console.error('Failed to create agent workspace', err);
-    await window.showMessageBox({
-      title: 'Agent Workspace',
-      type: 'error',
-      message: `Error while creating workspace: ${err instanceof Error ? err.message : String(err)}`,
-      buttons: ['OK'],
-    });
+    window
+      .showMessageBox({
+        title: 'Agent Workspace',
+        type: 'error',
+        message: `Error while creating workspace: ${err instanceof Error ? err.message : String(err)}`,
+        buttons: ['OK'],
+      })
+      .catch(console.error);
+  } finally {
+    handleNavigation({ page: NavigationPage.AGENT_WORKSPACES });
   }
 }
 </script>

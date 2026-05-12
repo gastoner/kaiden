@@ -435,6 +435,7 @@ test('Expect createAgentWorkspace excludes disabled skill paths', async () => {
       managed: true,
     },
   ]);
+  wizard.draft.selectedSkillIds = ['kubernetes'];
 
   render(AgentWorkspaceCreate);
 
@@ -1531,8 +1532,28 @@ test('Expect startWorkspace does not pass replaceConfig when configAction is mer
   );
 });
 
-test('Expect error dialog shown when createAgentWorkspace fails from use-all-defaults', async () => {
-  vi.mocked(window.createAgentWorkspace).mockRejectedValue(new Error('container runtime not available'));
+test('Expect draft preserved when startAsIs fails', async () => {
+  vi.mocked(window.createAgentWorkspace).mockRejectedValue(new Error('creation failed'));
+  vi.mocked(window.checkAgentWorkspaceConfigExists).mockResolvedValue(true);
+
+  render(AgentWorkspaceCreate);
+
+  await fireEvent.input(screen.getByPlaceholderText('/path/to/project'), {
+    target: { value: '/home/user/existing-project' },
+  });
+
+  await vi.waitFor(() => {
+    expect(screen.getByRole('button', { name: 'Start workspace as-is' })).toBeInTheDocument();
+  });
+
+  wizard.draft.currentStepIndex = 0;
+  await fireEvent.click(screen.getByRole('button', { name: 'Start workspace as-is' }));
+
+  expect(wizard.draft.sourcePath).toBe('/home/user/existing-project');
+});
+
+test('Expect draft preserved when startWorkspace fails', async () => {
+  vi.mocked(window.createAgentWorkspace).mockRejectedValue(new Error('creation failed'));
   vi.mocked(window.showMessageBox).mockResolvedValue({ response: 0 });
 
   render(AgentWorkspaceCreate);
@@ -1547,10 +1568,13 @@ test('Expect error dialog shown when createAgentWorkspace fails from use-all-def
       expect.objectContaining({
         title: 'Agent Workspace',
         type: 'error',
-        message: expect.stringContaining('container runtime not available'),
+        message: expect.stringContaining('creation failed'),
       }),
     );
   });
+
+  expect(wizard.draft.sourcePath).toBe('/home/user/my-repo');
+  expect(wizard.draft.sessionName).toBe('my-repo');
 });
 
 test('Expect error dialog shown when createAgentWorkspace fails from Start Workspace button', async () => {
@@ -1577,6 +1601,46 @@ test('Expect error dialog shown when createAgentWorkspace fails from Start Works
         message: expect.stringContaining('sandbox init failed'),
       }),
     );
+  });
+});
+
+test('Expect navigation still called when startAsIs fails', async () => {
+  const { handleNavigation } = await import('/@/navigation');
+  vi.mocked(window.createAgentWorkspace).mockRejectedValue(new Error('creation failed'));
+  vi.mocked(window.checkAgentWorkspaceConfigExists).mockResolvedValue(true);
+
+  render(AgentWorkspaceCreate);
+
+  await fireEvent.input(screen.getByPlaceholderText('/path/to/project'), {
+    target: { value: '/home/user/existing-project' },
+  });
+
+  await vi.waitFor(() => {
+    expect(screen.getByRole('button', { name: 'Start workspace as-is' })).toBeInTheDocument();
+  });
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Start workspace as-is' }));
+
+  await vi.waitFor(() => {
+    expect(handleNavigation).toHaveBeenCalledWith({ page: 'agent-workspaces' });
+  });
+});
+
+test('Expect navigation still called when startWorkspace fails', async () => {
+  const { handleNavigation } = await import('/@/navigation');
+  vi.mocked(window.createAgentWorkspace).mockRejectedValue(new Error('creation failed'));
+  vi.mocked(window.showMessageBox).mockResolvedValue({ response: 0 });
+
+  render(AgentWorkspaceCreate);
+
+  await fireEvent.input(screen.getByPlaceholderText('/path/to/project'), {
+    target: { value: '/home/user/my-repo' },
+  });
+
+  await fireEvent.click(screen.getByRole('button', { name: 'Use all defaults and create workspace' }));
+
+  await vi.waitFor(() => {
+    expect(handleNavigation).toHaveBeenCalledWith({ page: 'agent-workspaces' });
   });
 });
 
