@@ -48,6 +48,7 @@ const workspaceSummary: AgentWorkspaceSummary = {
   name: 'api-refactor',
   project: 'backend',
   agent: 'coder-v1',
+  runtime: 'podman',
   state: 'stopped',
   runtime: 'podman',
   paths: {
