@@ -20,6 +20,7 @@ interface Props {
   selected?: string[];
   emptyMessage?: string;
   headerAction?: Snippet;
+  onchange?: (selected: string[]) => void;
 }
 
 let {
@@ -30,6 +31,7 @@ let {
   selected = $bindable<string[]>([]),
   emptyMessage = 'No items available.',
   headerAction,
+  onchange,
 }: Props = $props();
 
 interface GroupedItems {
@@ -58,6 +60,7 @@ function toggle(id: string): void {
   } else {
     selected = [...selected, id];
   }
+  onchange?.(selected);
 }
 </script>
 

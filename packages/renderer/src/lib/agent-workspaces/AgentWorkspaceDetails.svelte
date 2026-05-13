@@ -150,7 +150,7 @@ function handleRemove(): void {
       <AgentWorkspaceDetailsFiles />
     </Route> -->
     <Route path="/settings" breadcrumb="Settings" navigationHint="tab">
-      <AgentWorkspaceDetailsSettings {workspaceId} {workspaceSummary} {configuration} />
+      <AgentWorkspaceDetailsSettings {workspaceId} {workspaceSummary} bind:configuration />
     </Route>
   {/snippet}
 </DetailsPage>

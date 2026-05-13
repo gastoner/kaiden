@@ -1,9 +1,15 @@
 <script lang="ts">
+import { faWrench } from '@fortawesome/free-solid-svg-icons';
 import { Button, Input, SettingsNavItem } from '@podman-desktop/ui-svelte';
 import { router } from 'tinro';
 
+import type { ChecklistItem } from '/@/lib/ui/ChecklistPanel.svelte';
+import ChecklistPanel from '/@/lib/ui/ChecklistPanel.svelte';
+import { handleNavigation } from '/@/navigation';
 import type { AgentWorkspaceSummaryUI } from '/@/stores/agent-workspaces.svelte';
+import { skillInfos } from '/@/stores/skills';
 import type { AgentWorkspaceConfiguration } from '/@api/agent-workspace-info';
+import { NavigationPage } from '/@api/navigation-page';
 
 type SettingsSection = 'general' | 'skills' | 'mcp' | 'knowledge' | 'file-access' | 'network' | 'advanced';
 
@@ -35,25 +41,56 @@ const activeLabel = $derived(sections.find(s => s.id === activeSection)?.label ?
 
 const originalName = $derived(workspaceSummary?.name ?? '');
 let workspaceName = $state(originalName);
-const hasChanges = $derived(workspaceName.trim() !== originalName && workspaceName.trim().length > 0);
+function discardChanges(): void {
+  workspaceName = originalName;
+  pendingSkillIds = [...originalSkillIds];
+}
+
+const placeholderSections: Set<SettingsSection> = new Set(['mcp', 'knowledge', 'file-access', 'network', 'advanced']);
+
+let skillItems: ChecklistItem[] = $derived(
+  $skillInfos.map(s => ({
+    id: s.name,
+    name: s.name,
+    description: s.description,
+    group: s.managed ? 'Custom' : 'Pre-built',
+  })),
+);
+
+const originalSkillIds = $derived(
+  (configuration?.skills ?? [])
+    .map(path => $skillInfos.find(s => s.path === path)?.name)
+    .filter((name): name is string => name !== undefined),
+);
+
+let pendingSkillIds: string[] = $state([...originalSkillIds]);
+
+function onSkillsChange(updated: string[]): void {
+  pendingSkillIds = updated;
+}
+
+const hasNameChanges = $derived(workspaceName.trim() !== originalName && workspaceName.trim().length > 0);
+const hasSkillChanges = $derived(
+  pendingSkillIds.length !== originalSkillIds.length || pendingSkillIds.some(id => !originalSkillIds.includes(id)),
+);
+const hasChanges = $derived(hasNameChanges || hasSkillChanges);
 
 async function saveChanges(): Promise<void> {
-  const trimmed = workspaceName.trim();
-  if (!trimmed || trimmed === originalName) return;
-  try {
-    await window.updateAgentWorkspaceSummary(workspaceId, { name: trimmed });
-  } catch (err: unknown) {
-    await window.showMessageBox({
-      title: 'Agent Workspace',
-      type: 'error',
-      message: `Failed to save workspace settings: ${err instanceof Error ? err.message : String(err)}`,
-      buttons: ['OK'],
-    });
+  if (hasNameChanges) {
+    await window.updateAgentWorkspaceSummary(workspaceId, { name: workspaceName.trim() });
+  }
+  if (hasSkillChanges) {
+    const selectedPaths = pendingSkillIds
+      .map(name => $skillInfos.find(s => s.name === name)?.path)
+      .filter((path): path is string => path !== undefined);
+    const newSkills = selectedPaths.length > 0 ? selectedPaths : undefined;
+    configuration = { ...configuration, skills: newSkills };
+    await window.updateAgentWorkspaceConfiguration(workspaceId, { skills: newSkills });
   }
 }
 
-function discardChanges(): void {
-  workspaceName = originalName;
+function navigateToSkills(): void {
+  handleNavigation({ page: NavigationPage.SKILLS });
 }
 </script>
 
@@ -123,7 +160,23 @@ function discardChanges(): void {
             </div>
           </div>
 
-        {:else}
+        {:else if activeSection === 'skills'}
+          <p class="text-sm text-[var(--pd-content-text)] mb-7">
+            Configure agent skills settings for this workspace.
+          </p>
+          <ChecklistPanel
+            title="Skills"
+            subtitle="Select the capabilities your agent should have"
+            icon={faWrench}
+            items={skillItems}
+            selected={pendingSkillIds}
+            onchange={onSkillsChange}
+            emptyMessage="No skills available yet.">
+            {#snippet headerAction()}
+              <Button type="secondary" onclick={navigateToSkills}>Manage Skills</Button>
+            {/snippet}
+          </ChecklistPanel>
+        {:else if placeholderSections.has(activeSection)}
           <p class="text-sm text-[var(--pd-content-text)] mb-7">
             Configure {activeLabel.toLowerCase()} settings for this workspace.
           </p>

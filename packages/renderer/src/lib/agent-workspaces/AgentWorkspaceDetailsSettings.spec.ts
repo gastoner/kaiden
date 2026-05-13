@@ -23,11 +23,15 @@ import { writable } from 'svelte/store';
 import { router } from 'tinro';
 import { beforeEach, expect, test, vi } from 'vitest';
 
+import * as skillsStore from '/@/stores/skills';
 import type { AgentWorkspaceConfiguration, AgentWorkspaceSummary } from '/@api/agent-workspace-info';
+import type { SkillInfo } from '/@api/skill/skill-info';
 
 import AgentWorkspaceDetailsSettings from './AgentWorkspaceDetailsSettings.svelte';
 
 vi.mock(import('tinro'));
+vi.mock(import('/@/stores/skills'));
+vi.mock(import('/@/navigation'));
 
 const routerStore = writable({
   path: '/agent-workspaces/ws-1/settings',
@@ -59,9 +63,12 @@ const configuration: AgentWorkspaceConfiguration = {
 };
 
 beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.resetAllMocks();
   vi.mocked(router).subscribe.mockImplementation(routerStore.subscribe);
   vi.mocked(window.updateAgentWorkspaceSummary).mockResolvedValue(undefined);
+  vi.mocked(window.updateAgentWorkspaceConfiguration).mockResolvedValue(undefined);
+  vi.mocked(skillsStore).skillInfos = writable<readonly SkillInfo[]>([]);
 });
 
 test('Expect General section is active by default with workspace info', () => {
@@ -82,15 +89,6 @@ test('Expect working directory is displayed in input', () => {
 
   const dirInput = screen.getByRole('textbox', { name: 'Working Directory' });
   expect(dirInput).toHaveValue('/home/user/projects/backend');
-});
-
-test('Expect switching to a placeholder section shows future update message', async () => {
-  render(AgentWorkspaceDetailsSettings, { workspaceId: 'ws-1', workspaceSummary, configuration });
-
-  const skillsNav = screen.getByRole('link', { name: 'Agent Skills' });
-  await fireEvent.click(skillsNav);
-
-  expect(screen.getByText('Agent Skills settings will be available in a future update.')).toBeInTheDocument();
 });
 
 test('Expect all settings nav sections are rendered', () => {
@@ -178,21 +176,149 @@ test('Expect empty inputs when workspace summary is undefined', () => {
   expect(dirInput).toHaveValue('');
 });
 
-test('Expect error dialog shown when save fails', async () => {
-  vi.mocked(window.updateAgentWorkspaceSummary).mockRejectedValue(new Error('network timeout'));
-  vi.mocked(window.showMessageBox).mockResolvedValue({ response: 0 });
+test('Expect skills checklist shown when switching to Agent Skills section', async () => {
+  vi.mocked(skillsStore).skillInfos = writable<readonly SkillInfo[]>([
+    { name: 'kubernetes', description: 'Deploy clusters', path: '/skills/kubernetes', enabled: true, managed: false },
+  ]);
 
   render(AgentWorkspaceDetailsSettings, { workspaceId: 'ws-1', workspaceSummary, configuration });
 
-  const nameInput = screen.getByRole('textbox', { name: 'Workspace Name' });
-  await fireEvent.input(nameInput, { target: { value: 'new-name' } });
+  await fireEvent.click(screen.getByRole('link', { name: 'Agent Skills' }));
+
+  expect(screen.getByText('Skills')).toBeInTheDocument();
+  expect(screen.getByText('kubernetes')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Manage Skills' })).toBeInTheDocument();
+});
+
+test('Expect empty state when no skills available', async () => {
+  render(AgentWorkspaceDetailsSettings, { workspaceId: 'ws-1', workspaceSummary, configuration });
+
+  await fireEvent.click(screen.getByRole('link', { name: 'Agent Skills' }));
+
+  expect(screen.getByText('No skills available yet.')).toBeInTheDocument();
+});
+
+test('Expect configured skills are pre-selected', async () => {
+  vi.mocked(skillsStore).skillInfos = writable<readonly SkillInfo[]>([
+    { name: 'kubernetes', description: 'Deploy clusters', path: '/skills/kubernetes', enabled: true, managed: false },
+    { name: 'code-review', description: 'Analyze code', path: '/skills/code-review', enabled: true, managed: true },
+  ]);
+
+  const configWithSkills: AgentWorkspaceConfiguration = {
+    ...configuration,
+    skills: ['/skills/kubernetes'],
+  };
+
+  render(AgentWorkspaceDetailsSettings, {
+    workspaceId: 'ws-1',
+    workspaceSummary,
+    configuration: configWithSkills,
+  });
+
+  await fireEvent.click(screen.getByRole('link', { name: 'Agent Skills' }));
+
+  expect(screen.getByText('1 of 2 selected')).toBeInTheDocument();
+});
+
+test('Expect toggling a skill shows save bar without immediate save', async () => {
+  vi.mocked(skillsStore).skillInfos = writable<readonly SkillInfo[]>([
+    { name: 'kubernetes', description: 'Deploy clusters', path: '/skills/kubernetes', enabled: true, managed: false },
+  ]);
+
+  render(AgentWorkspaceDetailsSettings, { workspaceId: 'ws-1', workspaceSummary, configuration });
+
+  await fireEvent.click(screen.getByRole('link', { name: 'Agent Skills' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'kubernetes' }));
+
+  expect(screen.getByText('You have unsaved changes')).toBeInTheDocument();
+  expect(window.updateAgentWorkspaceConfiguration).not.toHaveBeenCalled();
+});
+
+test('Expect Save changes persists skill selection', async () => {
+  vi.mocked(skillsStore).skillInfos = writable<readonly SkillInfo[]>([
+    { name: 'kubernetes', description: 'Deploy clusters', path: '/skills/kubernetes', enabled: true, managed: false },
+  ]);
+
+  render(AgentWorkspaceDetailsSettings, { workspaceId: 'ws-1', workspaceSummary, configuration });
+
+  await fireEvent.click(screen.getByRole('link', { name: 'Agent Skills' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'kubernetes' }));
   await fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
-  expect(window.showMessageBox).toHaveBeenCalledWith(
-    expect.objectContaining({
-      title: 'Agent Workspace',
-      type: 'error',
-      message: expect.stringContaining('network timeout'),
-    }),
-  );
+  expect(window.updateAgentWorkspaceConfiguration).toHaveBeenCalledWith('ws-1', {
+    skills: ['/skills/kubernetes'],
+  });
+});
+
+test('Expect Discard changes resets skill selection', async () => {
+  vi.mocked(skillsStore).skillInfos = writable<readonly SkillInfo[]>([
+    { name: 'kubernetes', description: 'Deploy clusters', path: '/skills/kubernetes', enabled: true, managed: false },
+  ]);
+
+  render(AgentWorkspaceDetailsSettings, { workspaceId: 'ws-1', workspaceSummary, configuration });
+
+  await fireEvent.click(screen.getByRole('link', { name: 'Agent Skills' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'kubernetes' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
+
+  expect(screen.queryByText('You have unsaved changes')).not.toBeInTheDocument();
+  expect(window.updateAgentWorkspaceConfiguration).not.toHaveBeenCalled();
+});
+
+test('Expect removing all skills saves undefined when Save changes clicked', async () => {
+  vi.mocked(skillsStore).skillInfos = writable<readonly SkillInfo[]>([
+    { name: 'kubernetes', description: 'Deploy clusters', path: '/skills/kubernetes', enabled: true, managed: false },
+  ]);
+
+  const configWithSkills: AgentWorkspaceConfiguration = {
+    ...configuration,
+    skills: ['/skills/kubernetes'],
+  };
+
+  render(AgentWorkspaceDetailsSettings, {
+    workspaceId: 'ws-1',
+    workspaceSummary,
+    configuration: configWithSkills,
+  });
+
+  await fireEvent.click(screen.getByRole('link', { name: 'Agent Skills' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'kubernetes' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+  expect(window.updateAgentWorkspaceConfiguration).toHaveBeenCalledWith('ws-1', {
+    skills: undefined,
+  });
+});
+
+test('Expect all skills shown including disabled ones', async () => {
+  vi.mocked(skillsStore).skillInfos = writable<readonly SkillInfo[]>([
+    { name: 'kubernetes', description: 'Deploy clusters', path: '/skills/kubernetes', enabled: true, managed: false },
+    { name: 'disabled-skill', description: 'Not active', path: '/skills/disabled', enabled: false, managed: false },
+  ]);
+
+  render(AgentWorkspaceDetailsSettings, { workspaceId: 'ws-1', workspaceSummary, configuration });
+
+  await fireEvent.click(screen.getByRole('link', { name: 'Agent Skills' }));
+
+  expect(screen.getByText('kubernetes')).toBeInTheDocument();
+  expect(screen.getByText('disabled-skill')).toBeInTheDocument();
+});
+
+test('Expect Manage Skills button navigates to skills page', async () => {
+  const { handleNavigation } = await import('/@/navigation');
+
+  render(AgentWorkspaceDetailsSettings, { workspaceId: 'ws-1', workspaceSummary, configuration });
+
+  await fireEvent.click(screen.getByRole('link', { name: 'Agent Skills' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Manage Skills' }));
+
+  expect(handleNavigation).toHaveBeenCalledWith({ page: 'skills' });
+});
+
+test('Expect switching to a placeholder section shows future update message', async () => {
+  render(AgentWorkspaceDetailsSettings, { workspaceId: 'ws-1', workspaceSummary, configuration });
+
+  await fireEvent.click(screen.getByRole('link', { name: 'MCP Servers' }));
+
+  expect(screen.getByText('MCP Servers settings will be available in a future update.')).toBeInTheDocument();
 });
