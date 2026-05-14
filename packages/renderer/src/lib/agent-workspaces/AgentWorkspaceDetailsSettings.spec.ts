@@ -177,3 +177,22 @@ test('Expect empty inputs when workspace summary is undefined', () => {
   const dirInput = screen.getByRole('textbox', { name: 'Working Directory' });
   expect(dirInput).toHaveValue('');
 });
+
+test('Expect error dialog shown when save fails', async () => {
+  vi.mocked(window.updateAgentWorkspaceSummary).mockRejectedValue(new Error('network timeout'));
+  vi.mocked(window.showMessageBox).mockResolvedValue({ response: 0 });
+
+  render(AgentWorkspaceDetailsSettings, { workspaceId: 'ws-1', workspaceSummary, configuration });
+
+  const nameInput = screen.getByRole('textbox', { name: 'Workspace Name' });
+  await fireEvent.input(nameInput, { target: { value: 'new-name' } });
+  await fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+  expect(window.showMessageBox).toHaveBeenCalledWith(
+    expect.objectContaining({
+      title: 'Agent Workspace',
+      type: 'error',
+      message: expect.stringContaining('network timeout'),
+    }),
+  );
+});

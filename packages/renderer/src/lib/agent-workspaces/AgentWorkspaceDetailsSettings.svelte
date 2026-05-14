@@ -40,7 +40,16 @@ const hasChanges = $derived(workspaceName.trim() !== originalName && workspaceNa
 async function saveChanges(): Promise<void> {
   const trimmed = workspaceName.trim();
   if (!trimmed || trimmed === originalName) return;
-  await window.updateAgentWorkspaceSummary(workspaceId, { name: trimmed });
+  try {
+    await window.updateAgentWorkspaceSummary(workspaceId, { name: trimmed });
+  } catch (err: unknown) {
+    await window.showMessageBox({
+      title: 'Agent Workspace',
+      type: 'error',
+      message: `Failed to save workspace settings: ${err instanceof Error ? err.message : String(err)}`,
+      buttons: ['OK'],
+    });
+  }
 }
 
 function discardChanges(): void {
