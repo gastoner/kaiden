@@ -76,16 +76,20 @@ const hasSkillChanges = $derived(
 const hasChanges = $derived(hasNameChanges || hasSkillChanges);
 
 async function saveChanges(): Promise<void> {
-  if (hasNameChanges) {
-    await window.updateAgentWorkspaceSummary(workspaceId, { name: workspaceName.trim() });
-  }
-  if (hasSkillChanges) {
-    const selectedPaths = pendingSkillIds
-      .map(name => $skillInfos.find(s => s.name === name)?.path)
-      .filter((path): path is string => path !== undefined);
-    const newSkills = selectedPaths.length > 0 ? selectedPaths : undefined;
-    configuration = { ...configuration, skills: newSkills };
-    await window.updateAgentWorkspaceConfiguration(workspaceId, { skills: newSkills });
+  try {
+    if (hasNameChanges) {
+      await window.updateAgentWorkspaceSummary(workspaceId, { name: workspaceName.trim() });
+    }
+    if (hasSkillChanges) {
+      const selectedPaths = pendingSkillIds
+        .map(name => $skillInfos.find(s => s.name === name)?.path)
+        .filter((path): path is string => path !== undefined);
+      const newSkills = selectedPaths.length > 0 ? selectedPaths : undefined;
+      await window.updateAgentWorkspaceConfiguration(workspaceId, { skills: newSkills });
+      configuration = { ...configuration, skills: newSkills };
+    }
+  } catch {
+    discardChanges();
   }
 }
 

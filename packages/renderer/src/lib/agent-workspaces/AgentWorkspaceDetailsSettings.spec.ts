@@ -315,6 +315,36 @@ test('Expect Manage Skills button navigates to skills page', async () => {
   expect(handleNavigation).toHaveBeenCalledWith({ page: 'skills' });
 });
 
+test('Expect name save failure rolls back workspace name', async () => {
+  vi.mocked(window.updateAgentWorkspaceSummary).mockRejectedValueOnce(new Error('network error'));
+
+  render(AgentWorkspaceDetailsSettings, { workspaceId: 'ws-1', workspaceSummary, configuration });
+
+  const nameInput = screen.getByRole('textbox', { name: 'Workspace Name' });
+  await fireEvent.input(nameInput, { target: { value: 'renamed' } });
+  await fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+  expect(nameInput).toHaveValue('api-refactor');
+  expect(screen.queryByText('You have unsaved changes')).not.toBeInTheDocument();
+});
+
+test('Expect skills save failure rolls back skill selection', async () => {
+  vi.mocked(window.updateAgentWorkspaceConfiguration).mockRejectedValueOnce(new Error('network error'));
+
+  vi.mocked(skillsStore).skillInfos = writable<readonly SkillInfo[]>([
+    { name: 'kubernetes', description: 'Deploy clusters', path: '/skills/kubernetes', enabled: true, managed: false },
+  ]);
+
+  render(AgentWorkspaceDetailsSettings, { workspaceId: 'ws-1', workspaceSummary, configuration });
+
+  await fireEvent.click(screen.getByRole('link', { name: 'Agent Skills' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'kubernetes' }));
+  await fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+  expect(screen.queryByText('You have unsaved changes')).not.toBeInTheDocument();
+  expect(screen.getByText('0 of 1 selected')).toBeInTheDocument();
+});
+
 test('Expect switching to a placeholder section shows future update message', async () => {
   render(AgentWorkspaceDetailsSettings, { workspaceId: 'ws-1', workspaceSummary, configuration });
 
