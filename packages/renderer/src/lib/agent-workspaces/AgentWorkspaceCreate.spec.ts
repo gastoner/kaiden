@@ -70,6 +70,7 @@ beforeEach(() => {
     (providerId: string, label: string): string => `${providerId}::${label}`,
   );
   vi.mocked(window.checkAgentWorkspaceConfigExists).mockResolvedValue(false);
+  vi.mocked(window.showMessageBox).mockResolvedValue({ response: 0 });
   resetDraft();
 });
 
