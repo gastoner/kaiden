@@ -72,4 +72,5 @@ export enum NavigationPage {
   SECRET_VAULT_DETAILS = 'secret-vault-details',
   MODELS = 'models',
   PROJECTS = 'projects',
+  PROJECT_DETAILS = 'project-details',
 }

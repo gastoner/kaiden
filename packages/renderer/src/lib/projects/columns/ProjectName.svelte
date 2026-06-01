@@ -1,6 +1,6 @@
 <script lang="ts">
-import { router } from 'tinro';
-
+import { handleNavigation } from '/@/navigation';
+import { NavigationPage } from '/@api/navigation-page';
 import type { WorkspaceProjectInfo } from '/@api/workspace-project-info';
 
 interface Props {
@@ -10,7 +10,7 @@ interface Props {
 let { object }: Props = $props();
 
 function openDetails(): void {
-  router.goto(`/projects/${encodeURIComponent(object.id)}`);
+  handleNavigation({ page: NavigationPage.PROJECT_DETAILS, parameters: { id: object.id } });
 }
 </script>
 
