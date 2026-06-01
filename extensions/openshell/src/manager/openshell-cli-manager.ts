@@ -17,7 +17,7 @@
  ***********************************************************************/
 
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import type { CliToolInstallationSource, Disposable, ExtensionContext } from '@openkaiden/api';
 import * as extensionApi from '@openkaiden/api';
@@ -25,76 +25,117 @@ import { inject, injectable } from 'inversify';
 
 import { ExtensionContextSymbol } from '/@/inject/symbol';
 
+interface BinaryDiscoveryResult {
+  path: string;
+  version: string;
+  installationSource: CliToolInstallationSource;
+}
+
 @injectable()
 export class OpenshellCliManager implements Disposable {
   @inject(ExtensionContextSymbol)
   private extensionContext!: ExtensionContext;
 
+  #registeredPath: string | undefined;
+
+  getRegisteredPath(): string | undefined {
+    return this.#registeredPath;
+  }
+
   async init(): Promise<void> {
-    const binDir = join(this.extensionContext.storagePath, 'bin');
-    const binaryName = 'openshell';
-    const localBinaryPath = join(binDir, binaryName);
-
-    let binaryPath: string | undefined;
-    let version: string | undefined;
-    let installationSource: CliToolInstallationSource = 'external';
-
-    const customPath = this.getCustomBinaryPath();
-    if (customPath && existsSync(customPath)) {
-      version = await this.getVersion(customPath);
-      if (version) {
-        binaryPath = customPath;
-        installationSource = 'external';
-        console.log(`[openshell] using custom binary path: ${customPath}`);
-      } else {
-        console.warn(`[openshell] custom binary at ${customPath} failed to report a version`);
-      }
-    }
-
-    if (!binaryPath && existsSync(localBinaryPath)) {
-      version = await this.getVersion(localBinaryPath);
-      if (version) {
-        binaryPath = localBinaryPath;
-        installationSource = 'extension';
-        console.log('[openshell] binary found in extension storage');
-      } else {
-        console.warn(`[openshell] binary exists at ${localBinaryPath} but failed to report a version`);
-      }
-    }
-
-    if (!binaryPath) {
-      const systemResult = await this.findOnPath();
-      if (systemResult) {
-        binaryPath = systemResult.path;
-        version = systemResult.version;
-        installationSource = 'external';
-        console.log('[openshell] binary found in system PATH');
-      } else {
-        console.warn('[openshell] not found in system PATH');
-      }
-    }
-
-    if (!binaryPath) {
+    const cliResult = await this.discoverBinary('openshell', 'openshell.binary.path');
+    if (!cliResult) {
       console.warn('[openshell] CLI not found, skipping registration');
       return;
     }
 
-    const cliTool = extensionApi.cli.createCliTool({
-      name: 'openshell',
-      displayName: 'OpenShell',
-      markdownDescription: 'OpenShell CLI for managing sandboxed workspaces',
-      images: {},
-      version,
-      path: binaryPath,
-      installationSource,
-    });
-    this.extensionContext.subscriptions.push(cliTool);
+    this.#registeredPath = cliResult.path;
+    this.registerCliTool('openshell', 'OpenShell', 'OpenShell CLI for managing sandboxed workspaces', cliResult);
+
+    const gatewayResult = await this.discoverGatewayBinary(cliResult.path);
+    if (gatewayResult) {
+      this.registerCliTool(
+        'openshell-gateway',
+        'OpenShell Gateway',
+        'OpenShell Gateway server for sandbox orchestration',
+        gatewayResult,
+      );
+    } else {
+      console.warn('[openshell-gateway] binary not found, skipping registration');
+    }
   }
 
   dispose(): void {}
 
-  private getCustomBinaryPath(): string | undefined {
-    return extensionApi.configuration.getConfiguration('openshell').get<string>('binary.path') ?? undefined;
+  private registerCliTool(
+    name: string,
+    displayName: string,
+    markdownDescription: string,
+    result: BinaryDiscoveryResult,
+  ): void {
+    const cliTool = extensionApi.cli.createCliTool({
+      name,
+      displayName,
+      markdownDescription,
+      images: {},
+      version: result.version,
+      path: result.path,
+      installationSource: result.installationSource,
+    });
+    this.extensionContext.subscriptions.push(cliTool);
+    console.log(`[${name}] registered at ${result.path} (v${result.version})`);
+  }
+
+  private async discoverBinary(binaryBaseName: string, configKey: string): Promise<BinaryDiscoveryResult | undefined> {
+    const binDir = join(this.extensionContext.storagePath, 'bin');
+    const binaryName = extensionApi.env.isWindows ? `${binaryBaseName}.exe` : binaryBaseName;
+    const localBinaryPath = join(binDir, binaryName);
+
+    const customPath = extensionApi.configuration.getConfiguration('openshell').get<string>(configKey) ?? undefined;
+    if (customPath && existsSync(customPath)) {
+      const version = await this.getVersion(customPath);
+      if (version) {
+        console.log(`[${binaryBaseName}] using custom binary path: ${customPath}`);
+        return { path: customPath, version, installationSource: 'external' };
+      }
+      console.warn(`[${binaryBaseName}] custom binary at ${customPath} failed to report a version`);
+    }
+
+    if (existsSync(localBinaryPath)) {
+      const version = await this.getVersion(localBinaryPath);
+      if (version) {
+        console.log(`[${binaryBaseName}] binary found in extension storage`);
+        return { path: localBinaryPath, version, installationSource: 'extension' };
+      }
+      console.warn(`[${binaryBaseName}] binary exists at ${localBinaryPath} but failed to report a version`);
+    }
+
+    const systemResult = await this.findOnPath(binaryBaseName);
+    if (systemResult) {
+      console.log(`[${binaryBaseName}] binary found in system PATH`);
+      return { path: systemResult.path, version: systemResult.version, installationSource: 'external' };
+    }
+
+    return undefined;
+  }
+
+  private async discoverGatewayBinary(cliPath: string): Promise<BinaryDiscoveryResult | undefined> {
+    const result = await this.discoverBinary('openshell-gateway', 'openshell.gateway.binary.path');
+    if (result) {
+      return result;
+    }
+
+    const gatewayName = extensionApi.env.isWindows ? 'openshell-gateway.exe' : 'openshell-gateway';
+    const siblingPath = join(dirname(cliPath), gatewayName);
+    if (existsSync(siblingPath)) {
+      const version = await this.getVersion(siblingPath);
+      if (version) {
+        console.log('[openshell-gateway] binary found alongside openshell CLI');
+        return { path: siblingPath, version, installationSource: 'external' };
+      }
+    }
+
+    return undefined;
   }
 
   private parseVersion(output: string): string | undefined {
@@ -112,12 +153,12 @@ export class OpenshellCliManager implements Disposable {
     }
   }
 
-  private async findOnPath(): Promise<{ version: string; path: string } | undefined> {
+  private async findOnPath(binaryName: string): Promise<{ version: string; path: string } | undefined> {
     try {
-      const result = await extensionApi.process.exec('openshell', ['--version']);
+      const result = await extensionApi.process.exec(binaryName, ['--version']);
       const version = this.parseVersion(result.stdout || result.stderr);
       if (version) {
-        const resolvedPath = await this.resolveFromPath();
+        const resolvedPath = await this.resolveFromPath(binaryName);
         return { version, path: resolvedPath };
       }
     } catch {
@@ -126,9 +167,9 @@ export class OpenshellCliManager implements Disposable {
     return undefined;
   }
 
-  private async resolveFromPath(): Promise<string> {
+  private async resolveFromPath(binaryName: string): Promise<string> {
     const cmd = extensionApi.env.isWindows ? 'where' : 'which';
-    const result = await extensionApi.process.exec(cmd, ['openshell']);
+    const result = await extensionApi.process.exec(cmd, [binaryName]);
     return result.stdout.trim().split(/\r?\n/)[0];
   }
 }

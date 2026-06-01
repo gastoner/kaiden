@@ -1,0 +1,74 @@
+/**********************************************************************
+ * Copyright (C) 2026 Red Hat, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ***********************************************************************/
+
+import z from 'zod';
+
+export const GatewayInfoSchema = z.object({
+  name: z.string(),
+  endpoint: z.string(),
+  active: z.boolean().optional(),
+  auth: z.string().optional(),
+  type: z.string().optional(),
+});
+
+export type GatewayInfo = z.output<typeof GatewayInfoSchema>;
+
+export const SandboxInfoSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  phase: z.string(),
+  created_at: z.string().optional(),
+  current_policy_version: z.number().optional(),
+  labels: z.record(z.string(), z.string()).optional(),
+  resource_version: z.number().optional(),
+});
+
+export type SandboxInfo = z.output<typeof SandboxInfoSchema>;
+
+export interface CreateSandboxOptions {
+  name?: string;
+  gateway?: string;
+  from?: string;
+  gpu?: boolean;
+  gpuDevice?: string;
+  cpu?: string;
+  memory?: string;
+  providers?: string[];
+  labels?: Record<string, string>;
+  command?: string[];
+}
+
+export interface GatewayAddOptions {
+  endpoint: string;
+  name?: string;
+  /** SSH destination for remote mTLS gateway (conflicts with `local`). */
+  remote?: string;
+  /** Use local mTLS gateway in Docker (conflicts with `remote`). */
+  local?: boolean;
+}
+
+export interface OpenshellGatewayStartOptions {
+  port?: number;
+  bindAddress?: string;
+  disableTls?: boolean;
+}
+
+export interface GatewaySandboxes {
+  gateway: GatewayInfo;
+  sandboxes: SandboxInfo[];
+}

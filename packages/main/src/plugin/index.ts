@@ -70,6 +70,8 @@ import { MCPIPCHandler } from '/@/plugin/mcp/mcp-ipc-handler.js';
 import { MCPManager } from '/@/plugin/mcp/mcp-manager.js';
 import { MenuRegistry } from '/@/plugin/menu-registry.js';
 import { NavigationManager } from '/@/plugin/navigation/navigation-manager.js';
+import { OpenshellCli } from '/@/plugin/openshell-cli/openshell-cli.js';
+import { OpenshellGateway } from '/@/plugin/openshell-cli/openshell-gateway.js';
 import { RagEnvironmentRegistry } from '/@/plugin/rag-environment-registry.js';
 import { SchedulerRegistry } from '/@/plugin/scheduler/scheduler-registry.js';
 import { SecretManager } from '/@/plugin/secret-manager/secret-manager.js';
@@ -588,6 +590,8 @@ export class PluginSystem {
     container.bind<CliToolRegistry>(CliToolRegistry).toSelf().inSingletonScope();
     container.bind<AgentRegistry>(AgentRegistry).toSelf().inSingletonScope();
     container.bind<KdnCli>(KdnCli).toSelf().inSingletonScope();
+    container.bind<OpenshellCli>(OpenshellCli).toSelf().inSingletonScope();
+    container.bind<OpenshellGateway>(OpenshellGateway).toSelf().inSingletonScope();
     container.bind<AgentWorkspaceManager>(AgentWorkspaceManager).toSelf().inSingletonScope();
     container.bind<SecretManager>(SecretManager).toSelf().inSingletonScope();
     container.bind<FlowManager>(FlowManager).toSelf().inSingletonScope();
@@ -3744,6 +3748,9 @@ export class PluginSystem {
       apiSender.send('extensions-started');
       this.markAsExtensionsStarted();
     }
+    const openshellGateway = container.get<OpenshellGateway>(OpenshellGateway);
+    openshellGateway.init().catch((err: unknown) => console.error('Unable to initialize openshell gateway', err));
+
     extensionsUpdater.init().catch((err: unknown) => console.error('Unable to perform extension updates', err));
     autoStartEngine.start().catch((err: unknown) => console.error('Unable to perform autostart', err));
     await exploreFeatures.init();
