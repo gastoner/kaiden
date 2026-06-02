@@ -22,16 +22,19 @@ import { fireEvent, render, screen } from '@testing-library/svelte';
 import { writable } from 'svelte/store';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
+import * as agentsStore from '/@/stores/agents';
 import * as agentWorkspaceRuntimeStore from '/@/stores/agentworkspace-runtime';
 import * as modelCatalogStore from '/@/stores/model-catalog';
 import * as modelsStore from '/@/stores/models';
 import * as providersStore from '/@/stores/providers';
+import type { AgentInfo } from '/@api/agent-info';
 import type { CatalogModelInfo } from '/@api/model-registry-info';
 import type { ProviderInfo } from '/@api/provider-info';
 
 import AgentWorkspaceCreateStepAgentModel from './AgentWorkspaceCreateStepAgentModel.svelte';
 
 vi.mock(import('/@/navigation'));
+vi.mock(import('/@/stores/agents'));
 vi.mock(import('/@/stores/providers'));
 vi.mock(import('/@/stores/model-catalog'));
 vi.mock(import('/@/stores/models'));
@@ -63,42 +66,41 @@ function setProviders(providers: ProviderInfo[]): void {
   vi.mocked(providersStore).providerInfos = writable<ProviderInfo[]>(providers);
   vi.mocked(modelsStore).catalogModels = writable<CatalogModelInfo[]>(buildCatalogModels(providers));
 }
-vi.mock(import('/@/lib/guided-setup/agent-registry'), async importOriginal => {
-  const actual = await importOriginal();
-  return {
-    matchesModelFilter: actual.matchesModelFilter,
-    agentDefinitions: [
-      {
-        cliName: 'opencode',
-        title: 'OpenCode',
-        description: 'Open-source agent.',
-        badge: 'Recommended',
-        modelFilter: '!vertexai',
-      },
-      {
-        cliName: 'claude',
-        title: 'Claude Code',
-        description: 'Anthropic Claude.',
-        badge: 'Cloud',
-        modelFilter: 'anthropic',
-      },
-      {
-        cliName: 'claude-vertex',
-        title: 'Claude on Vertex AI',
-        description: 'Claude via Vertex AI.',
-        modelFilter: 'vertexai',
-      },
-      { cliName: 'cursor', title: 'Cursor', description: 'AI code editor.', modelFilter: '!vertexai' },
-      {
-        cliName: 'goose',
-        title: 'Goose',
-        description: 'Autonomous coding agent.',
-        runtimes: ['podman'],
-        modelFilter: '!vertexai',
-      },
-    ] as unknown as typeof actual.agentDefinitions,
-  };
-});
+const mockAgentInfos: AgentInfo[] = [
+  {
+    id: 'opencode',
+    name: 'OpenCode',
+    description: 'Open-source agent.',
+    tags: ['Recommended'],
+    supportedModelTypes: [{ name: 'anthropic' }, { name: 'openai' }, { name: 'ollama' }, { name: 'gemini' }],
+  },
+  {
+    id: 'claude',
+    name: 'Claude Code',
+    description: 'Anthropic Claude.',
+    tags: ['Cloud'],
+    supportedModelTypes: [{ name: 'anthropic' }],
+  },
+  {
+    id: 'claude-vertex',
+    name: 'Claude on Vertex AI',
+    description: 'Claude via Vertex AI.',
+    supportedModelTypes: [{ name: 'vertexai' }],
+  },
+  {
+    id: 'cursor',
+    name: 'Cursor',
+    description: 'AI code editor.',
+    supportedModelTypes: [{ name: 'anthropic' }, { name: 'openai' }, { name: 'ollama' }, { name: 'gemini' }],
+  },
+  {
+    id: 'goose',
+    name: 'Goose',
+    description: 'Autonomous coding agent.',
+    supportedRuntimes: ['podman'],
+    supportedModelTypes: [{ name: 'anthropic' }, { name: 'openai' }, { name: 'ollama' }, { name: 'gemini' }],
+  },
+];
 
 const mockAnthropicProvider: ProviderInfo = {
   id: 'claude',
@@ -157,6 +159,7 @@ const mockOllamaProvider: ProviderInfo = {
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.resetAllMocks();
+  vi.mocked(agentsStore).agentInfos = writable<AgentInfo[]>(mockAgentInfos);
   vi.mocked(providersStore).providerInfos = writable<ProviderInfo[]>([]);
   vi.mocked(modelsStore).catalogModels = writable<CatalogModelInfo[]>([]);
   vi.mocked(agentWorkspaceRuntimeStore).agentWorkspaceRuntime = writable<string>('podman');
@@ -381,6 +384,22 @@ test('Claude on Vertex AI shows only Vertex AI models', async () => {
   expect(screen.getByText('claude-sonnet-4')).toBeInTheDocument();
   expect(screen.queryByText('llama3.2:3b')).not.toBeInTheDocument();
   expect(screen.queryByText('claude-opus-4')).not.toBeInTheDocument();
+});
+
+test('recommended agent is sorted first regardless of other tags', () => {
+  const agents: AgentInfo[] = [
+    { id: 'cloud', name: 'Cloud Agent', description: 'Cloud tag.', tags: ['Cloud'] },
+    { id: 'no-tag', name: 'No Tag Agent', description: 'No tags.' },
+    { id: 'recommended', name: 'Recommended Agent', description: 'Recommended.', tags: ['Recommended'] },
+  ];
+  vi.mocked(agentsStore).agentInfos = writable<AgentInfo[]>(agents);
+
+  render(AgentWorkspaceCreateStepAgentModel);
+
+  const options = screen.getAllByRole('option');
+  expect(options[0]).toHaveTextContent('Recommended Agent');
+  expect(options[1]).toHaveTextContent('Cloud Agent');
+  expect(options[2]).toHaveTextContent('No Tag Agent');
 });
 
 test('agent with non-matching runtime is hidden', () => {

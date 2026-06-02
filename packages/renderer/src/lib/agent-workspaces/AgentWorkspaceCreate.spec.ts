@@ -24,6 +24,7 @@ import { writable } from 'svelte/store';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { resetDraft, wizard } from '/@/stores/agent-workspace-create-draft.svelte';
+import * as agentsStore from '/@/stores/agents';
 import * as agentWorkspaceRuntimeStore from '/@/stores/agentworkspace-runtime';
 import * as mcpStore from '/@/stores/mcp-remote-servers';
 import * as modelCatalogStore from '/@/stores/model-catalog';
@@ -32,6 +33,7 @@ import * as providerStore from '/@/stores/providers';
 import * as ragStore from '/@/stores/rag-environments';
 import * as secretVaultStore from '/@/stores/secret-vault';
 import * as skillsStore from '/@/stores/skills';
+import type { AgentInfo } from '/@api/agent-info';
 import type { MCPRemoteServerInfo } from '/@api/mcp/mcp-server-info';
 import type { CatalogModelInfo } from '/@api/model-registry-info';
 import type { ProviderInfo } from '/@api/provider-info';
@@ -42,6 +44,7 @@ import type { SkillInfo } from '/@api/skill/skill-info';
 import AgentWorkspaceCreate from './AgentWorkspaceCreate.svelte';
 
 vi.mock(import('/@/navigation'));
+vi.mock(import('/@/stores/agents'));
 vi.mock(import('/@/stores/agentworkspace-runtime'));
 vi.mock(import('/@/stores/skills'));
 vi.mock(import('/@/stores/mcp-remote-servers'));
@@ -86,6 +89,29 @@ beforeEach(() => {
     cancel: vi.fn(),
     onfinish: null,
   });
+  vi.mocked(agentsStore).agentInfos = writable<AgentInfo[]>([
+    {
+      id: 'opencode',
+      name: 'OpenCode',
+      description: 'Open-source agent.',
+      tags: ['Recommended'],
+      supportedModelTypes: [{ name: 'anthropic' }, { name: 'openai' }, { name: 'ollama' }, { name: 'gemini' }],
+    },
+    {
+      id: 'claude',
+      name: 'Claude Code',
+      description: 'Anthropic Claude.',
+      tags: ['Cloud'],
+      supportedModelTypes: [{ name: 'anthropic' }],
+    },
+    {
+      id: 'goose',
+      name: 'Goose',
+      description: 'Autonomous coding agent.',
+      supportedRuntimes: ['podman'],
+      supportedModelTypes: [{ name: 'anthropic' }, { name: 'openai' }, { name: 'ollama' }, { name: 'gemini' }],
+    },
+  ]);
   vi.mocked(agentWorkspaceRuntimeStore).agentWorkspaceRuntime = writable<string>('podman');
   vi.mocked(skillsStore).skillInfos = writable<SkillInfo[]>([]);
   vi.mocked(mcpStore).mcpRemoteServerInfos = writable<MCPRemoteServerInfo[]>([]);
@@ -1214,9 +1240,9 @@ test('Expect workspaceConfiguration undefined when no settings for selected agen
   );
 });
 
-test('Expect workspaceConfiguration resolved via cliAgent for variant agents like claude-vertex', async () => {
+test('Expect workspaceConfiguration looked up by agent id directly', async () => {
   vi.mocked(window.getConfigurationValue).mockResolvedValue({
-    defaultAgent: 'claude-vertex',
+    defaultAgent: 'claude',
     defaultAgentSettings: {
       claude: {
         workspaceConfiguration: {
@@ -1225,6 +1251,7 @@ test('Expect workspaceConfiguration resolved via cliAgent for variant agents lik
       },
     },
   });
+  setProviders([mockAnthropicProvider]);
 
   render(AgentWorkspaceCreate);
 
@@ -1238,49 +1265,6 @@ test('Expect workspaceConfiguration resolved via cliAgent for variant agents lik
       agent: 'claude',
       workspaceConfiguration: {
         environment: [{ name: 'CLAUDE_CODE_USE_VERTEX', value: '1' }],
-      },
-    }),
-  );
-});
-
-test('Expect workspaceConfiguration falls back to raw agent key when resolved key has no config', async () => {
-  vi.mocked(window.getConfigurationValue).mockResolvedValue({
-    defaultAgent: 'claude-vertex',
-    defaultAgentSettings: {
-      'claude-vertex': {
-        workspaceConfiguration: {
-          environment: [{ name: 'CLOUD_ML_REGION', value: 'us-east5' }],
-          mounts: [
-            {
-              host: '$HOME/.config/gcloud/application_default_credentials.json',
-              target: '$HOME/.config/gcloud/application_default_credentials.json',
-              ro: true,
-            },
-          ],
-        },
-      },
-    },
-  });
-
-  render(AgentWorkspaceCreate);
-
-  await fireEvent.input(screen.getByPlaceholderText('/path/to/project'), {
-    target: { value: '/home/user/my-repo' },
-  });
-  await fireEvent.click(screen.getByRole('button', { name: 'Use all defaults and create workspace' }));
-
-  expect(window.createAgentWorkspace).toHaveBeenCalledWith(
-    expect.objectContaining({
-      agent: 'claude',
-      workspaceConfiguration: {
-        environment: [{ name: 'CLOUD_ML_REGION', value: 'us-east5' }],
-        mounts: [
-          {
-            host: '$HOME/.config/gcloud/application_default_credentials.json',
-            target: '$HOME/.config/gcloud/application_default_credentials.json',
-            ro: true,
-          },
-        ],
       },
     }),
   );

@@ -1,10 +1,13 @@
 <script lang="ts">
+import { faTerminal } from '@fortawesome/free-solid-svg-icons';
+import { Icon } from '@podman-desktop/ui-svelte/icons';
 import { untrack } from 'svelte';
 
+import IconImage from '/@/lib/appearance/IconImage.svelte';
 import type { ModelInfo } from '/@/lib/chat/components/model-info';
-import { agentDefinitions, matchesModelFilter } from '/@/lib/guided-setup/agent-registry';
 import type { CatalogModelInfo } from '/@/lib/models/models-utils';
 import ModelSelectionTable from '/@/lib/models/ModelSelectionTable.svelte';
+import { agentInfos } from '/@/stores/agents';
 import { agentWorkspaceRuntime } from '/@/stores/agentworkspace-runtime';
 import { disabledModels, isModelEnabled, modelKey } from '/@/stores/model-catalog';
 import { catalogModels } from '/@/stores/models';
@@ -16,7 +19,16 @@ interface Props {
 
 let { selectedAgent = $bindable(''), selectedModel = $bindable() }: Props = $props();
 
-let filteredAgents = $derived(agentDefinitions.filter(a => !a.runtimes || a.runtimes.includes($agentWorkspaceRuntime)));
+let filteredAgents = $derived(
+  $agentInfos
+    .filter(a => !a.supportedRuntimes || a.supportedRuntimes.some(r => r === $agentWorkspaceRuntime))
+    .toSorted((a, b) => {
+      const aRec = a.tags?.includes('Recommended') ? 1 : 0;
+      const bRec = b.tags?.includes('Recommended') ? 1 : 0;
+      if (aRec !== bRec) return bRec - aRec;
+      return a.name.localeCompare(b.name);
+    }),
+);
 
 let allModels: CatalogModelInfo[] = $derived.by(() => {
   const enabled = $catalogModels.filter(m => isModelEnabled($disabledModels, m.providerId, m.label));
@@ -31,17 +43,16 @@ let allModels: CatalogModelInfo[] = $derived.by(() => {
 
 let agentFilteredModels: CatalogModelInfo[] = $derived(filterByAgent(allModels, selectedAgent));
 
-let selectedAgentLabel: string = $derived(
-  agentDefinitions.find(a => a.cliName === selectedAgent)?.title ?? 'the selected agent',
-);
+let selectedAgentLabel: string = $derived($agentInfos.find(a => a.id === selectedAgent)?.name ?? 'the selected agent');
 
 let selectedKey: string = $derived(selectedModel ? modelKey(selectedModel.providerId, selectedModel.label) : '');
 
 function filterByAgent(models: CatalogModelInfo[], agent: string): CatalogModelInfo[] {
   if (!agent) return models;
-  const def = agentDefinitions.find(d => d.cliName === agent);
-  if (!def?.modelFilter) return models;
-  return models.filter(m => matchesModelFilter(def.modelFilter!, m.llmMetadata?.name));
+  const info = $agentInfos.find(a => a.id === agent);
+  if (!info?.supportedModelTypes || info.supportedModelTypes.length === 0) return models;
+  const typeNames = new Set(info.supportedModelTypes.map(t => t.name));
+  return models.filter(m => m.llmMetadata?.name !== undefined && typeNames.has(m.llmMetadata.name));
 }
 
 function handleModelSelect(model: CatalogModelInfo): void {
@@ -81,8 +92,8 @@ $effect(() => {
     </p>
 
     <div class="grid grid-cols-4 gap-3" role="listbox" aria-label="Coding agent">
-      {#each filteredAgents as agent (agent.cliName)}
-        {@const isSelected = selectedAgent === agent.cliName}
+      {#each filteredAgents as agent (agent.id)}
+        {@const isSelected = selectedAgent === agent.id}
         <button
           type="button"
           role="option"
@@ -91,18 +102,24 @@ $effect(() => {
             {isSelected
               ? 'border-[var(--pd-content-card-border-selected)] bg-[var(--pd-content-card-hover-inset-bg)]'
               : 'border-[var(--pd-content-card-border)] bg-[var(--pd-content-card-inset-bg)] hover:bg-[var(--pd-content-card-hover-inset-bg)]'}"
-          onclick={(): void => selectAgent(agent.cliName)}>
-          {#if agent.iconComponent}
-            <agent.iconComponent size={44} />
-          {/if}
-          <span class="font-bold text-sm text-[var(--pd-modal-text)]">{agent.title}</span>
+          onclick={(): void => selectAgent(agent.id)}>
+          <div class="w-11 h-11 flex items-center justify-center">
+            <IconImage image={agent.icon?.logo ?? agent.icon?.icon} alt={agent.name} class="w-11 h-11">
+              <Icon icon={faTerminal} size="2x" />
+            </IconImage>
+          </div>
+          <span class="font-bold text-sm text-[var(--pd-modal-text)]">{agent.name}</span>
           <p class="text-xs text-[var(--pd-content-card-text)] opacity-70 leading-relaxed grow">
             {agent.description}
           </p>
-          {#if agent.badge}
-            <span class="self-start text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border border-[var(--pd-status-running)] text-[var(--pd-status-running)]">
-              {agent.badge}
-            </span>
+          {#if agent.tags?.length}
+            <div class="flex flex-wrap gap-1 self-start">
+              {#each agent.tags as tag (tag)}
+                <span class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border border-[var(--pd-status-running)] text-[var(--pd-status-running)]">
+                  {tag}
+                </span>
+              {/each}
+            </div>
           {/if}
         </button>
       {/each}

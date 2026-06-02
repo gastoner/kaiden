@@ -183,8 +183,11 @@ export const CODING_AGENT = {
   OPENCODE: 'OpenCode',
   OPENCLAW: 'OpenClaw',
   CLAUDE: 'Claude Code',
-  CLAUDE_VERTEX: 'Claude on Vertex AI',
   GOOSE: 'Goose',
+  CODEX: 'Codex',
+  CURSOR: 'Cursor CLI',
+  COPILOT: 'GitHub Copilot',
+  GEMINI: 'Gemini CLI',
 } as const;
 export const CODING_AGENTS = Object.values(CODING_AGENT);
 export type CodingAgent = (typeof CODING_AGENT)[keyof typeof CODING_AGENT];

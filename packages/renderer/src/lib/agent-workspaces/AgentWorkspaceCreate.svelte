@@ -6,13 +6,13 @@ import { onMount } from 'svelte';
 import { toast } from 'svelte-sonner';
 
 import type { ModelInfo } from '/@/lib/chat/components/model-info';
-import { agentDefinitions, matchesModelFilter } from '/@/lib/guided-setup/agent-registry';
 import { getModelId } from '/@/lib/models/models-utils';
 import type { ChecklistItem } from '/@/lib/ui/ChecklistPanel.svelte';
 import FormPage from '/@/lib/ui/FormPage.svelte';
 import WizardStepper from '/@/lib/ui/WizardStepper.svelte';
 import { handleNavigation } from '/@/navigation';
 import { resetDraft, wizard } from '/@/stores/agent-workspace-create-draft.svelte';
+import { agentInfos } from '/@/stores/agents';
 import { agentWorkspaceRuntime } from '/@/stores/agentworkspace-runtime';
 import { mcpRemoteServerInfos } from '/@/stores/mcp-remote-servers';
 import { disabledModels, isModelEnabled, modelKey } from '/@/stores/model-catalog';
@@ -93,7 +93,7 @@ onMount(async () => {
 
   if (!wizard.draft.initialized) {
     const defaultAgent = defaultSettings?.defaultAgent;
-    if (defaultAgent && agentDefinitions.some(d => d.cliName === defaultAgent)) {
+    if (defaultAgent && $agentInfos.some(a => a.id === defaultAgent)) {
       wizard.draft.selectedAgent = defaultAgent;
     }
 
@@ -257,10 +257,7 @@ function normalizeTildeToHome(p: string): string {
 }
 
 function getAgentWorkspaceConfiguration(agent: string): AgentWorkspaceConfiguration | undefined {
-  const resolvedAgent = agentDefinitions.find(d => d.cliName === agent)?.cliAgent ?? agent;
-  const config =
-    defaultSettings?.defaultAgentSettings?.[resolvedAgent]?.workspaceConfiguration ??
-    defaultSettings?.defaultAgentSettings?.[agent]?.workspaceConfiguration;
+  const config = defaultSettings?.defaultAgentSettings?.[agent]?.workspaceConfiguration;
   if (!config) return undefined;
   const snapshot = $state.snapshot(config);
   if (snapshot.mounts) {
@@ -274,7 +271,7 @@ function getAgentWorkspaceConfiguration(agent: string): AgentWorkspaceConfigurat
 }
 
 function getFirstCompatibleModel(): ModelInfo | undefined {
-  const agentDef = agentDefinitions.find(d => d.cliName === wizard.draft.selectedAgent);
+  const agentInfo = $agentInfos.find(a => a.id === wizard.draft.selectedAgent);
   const enabled = $catalogModels.filter(m => isModelEnabled($disabledModels, m.providerId, m.label));
   // eslint-disable-next-line svelte/prefer-svelte-reactivity
   const seen = new Set<string>();
@@ -284,10 +281,9 @@ function getFirstCompatibleModel(): ModelInfo | undefined {
     seen.add(key);
     return true;
   });
-  const compatible = agentDef?.modelFilter
-    ? unique.filter(m => matchesModelFilter(agentDef.modelFilter!, m.llmMetadata?.name))
-    : unique;
-  return compatible[0];
+  if (!agentInfo?.supportedModelTypes || agentInfo.supportedModelTypes.length === 0) return unique[0];
+  const typeNames = new Set(agentInfo.supportedModelTypes.map(t => t.name));
+  return unique.filter(m => m.llmMetadata?.name !== undefined && typeNames.has(m.llmMetadata.name))[0];
 }
 
 function buildMountsFrom(fileAccess: string, mounts: CustomMount[]): AgentWorkspaceMount[] | undefined {
@@ -318,11 +314,10 @@ async function startAsIs(): Promise<void> {
   const draftSnapshot = $state.snapshot(wizard.draft);
 
   try {
-    const agentDef = agentDefinitions.find(d => d.cliName === draftSnapshot.selectedAgent);
     await window.createAgentWorkspace({
       sourcePath: draftSnapshot.sourcePath,
       runtime: $agentWorkspaceRuntime,
-      agent: agentDef?.cliAgent ?? draftSnapshot.selectedAgent,
+      agent: draftSnapshot.selectedAgent,
       name: draftSnapshot.sessionName || getDefaultSessionName(draftSnapshot.sourcePath),
     });
     resetDraft();
@@ -356,8 +351,6 @@ async function startWorkspace(): Promise<void> {
     );
     const mounts = buildMountsFrom(draftSnapshot.selectedFileAccess, draftSnapshot.customMounts);
 
-    const agentDef = agentDefinitions.find(d => d.cliName === draftSnapshot.selectedAgent);
-
     const selected = $mcpRemoteServerInfos.filter(m => draftSnapshot.selectedMcpIds.includes(m.id));
     const remoteServers = selected
       .filter(m => m.setupType === 'remote' || (!m.setupType && m.url))
@@ -375,7 +368,7 @@ async function startWorkspace(): Promise<void> {
     await window.createAgentWorkspace({
       sourcePath: draftSnapshot.sourcePath,
       runtime: $agentWorkspaceRuntime,
-      agent: agentDef?.cliAgent ?? draftSnapshot.selectedAgent,
+      agent: draftSnapshot.selectedAgent,
       model: draftSnapshot.selectedModel ? getModelId(draftSnapshot.selectedModel) : undefined,
       name: draftSnapshot.sessionName,
       skills: selectedSkillPaths.length > 0 ? selectedSkillPaths : undefined,
