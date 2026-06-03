@@ -24,6 +24,19 @@
           "scope": "InferenceProviderConnectionFactory",
           "description": "apiKey",
           "format": "password"
+        },
+        "openai.connection._type": {
+          "type": "string",
+          "scope": "InferenceProviderConnection",
+          "description": "OpenShell provider type",
+          "hidden": true
+        },
+        "openai.connection.token": {
+          "type": "string",
+          "scope": "InferenceProviderConnection",
+          "description": "API key secret reference",
+          "format": "password",
+          "hidden": true
         }
       }
     }

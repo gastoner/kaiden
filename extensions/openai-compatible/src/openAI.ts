@@ -1,5 +1,5 @@
 /**********************************************************************
- * Copyright (C) 2025 Red Hat, Inc.
+ * Copyright (C) 2025-2026 Red Hat, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,10 @@ import { randomUUID } from 'node:crypto';
 
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type {
+  configuration as ConfigurationAPI,
   Disposable,
   InferenceModel,
+  InferenceProviderConnection,
   Provider,
   provider as ProviderAPI,
   ProviderConnectionStatus,
@@ -28,6 +30,7 @@ import type {
 } from '@openkaiden/api';
 
 export const TOKENS_KEY = 'openai:infos';
+export const PROVIDER_ID = 'openai';
 
 export interface StoredConnection {
   id: string;
@@ -42,6 +45,7 @@ export class OpenAI implements Disposable {
   constructor(
     private readonly providerAPI: typeof ProviderAPI,
     private readonly secrets: SecretStorage,
+    private readonly configurationAPI: typeof ConfigurationAPI,
   ) {}
 
   async init(): Promise<void> {
@@ -127,6 +131,28 @@ export class OpenAI implements Disposable {
     return body.data.map((model: { id: string }) => ({ label: model.id }));
   }
 
+  private getSecretName(connectionId: string): string {
+    return `${PROVIDER_ID}:${connectionId}:token`;
+  }
+
+  private async setConnectionConfiguration(connection: InferenceProviderConnection, token: string): Promise<void> {
+    const secretName = this.getSecretName(connection.id);
+    await this.secrets.store(secretName, token);
+
+    const config = this.configurationAPI.getConfiguration('openai.connection', connection);
+    await config.update('_type', PROVIDER_ID);
+    await config.update('token', secretName);
+  }
+
+  private async clearConnectionConfiguration(connection: InferenceProviderConnection): Promise<void> {
+    const secretName = this.getSecretName(connection.id);
+    await this.secrets.delete(secretName);
+
+    const config = this.configurationAPI.getConfiguration('openai.connection', connection);
+    await config.update('_type', undefined);
+    await config.update('token', undefined);
+  }
+
   private async registerInferenceProviderConnection({
     id,
     token,
@@ -153,13 +179,7 @@ export class OpenAI implements Disposable {
       name: baseURL,
     });
 
-    const clean = async (): Promise<void> => {
-      this.connections.get(id)?.dispose();
-      this.connections.delete(id);
-      await this.removeConnection(id);
-    };
-
-    const connectionDisposable = this.provider.registerInferenceProviderConnection({
+    const connection: InferenceProviderConnection = {
       id,
       name: baseURL,
       type: 'cloud',
@@ -170,16 +190,25 @@ export class OpenAI implements Disposable {
         return status;
       },
       lifecycle: {
-        delete: clean.bind(this),
+        delete: async (): Promise<void> => {
+          await this.clearConnectionConfiguration(connection);
+          this.connections.get(id)?.dispose();
+          this.connections.delete(id);
+          await this.removeConnection(id);
+        },
       },
-      models: models,
+      models,
       credentials(): Record<string, string> {
         return {
           'openai:tokens': token,
         };
       },
-    });
+    };
+
+    const connectionDisposable = this.provider.registerInferenceProviderConnection(connection);
     this.connections.set(id, connectionDisposable);
+
+    await this.setConnectionConfiguration(connection, token);
   }
 
   private async inferenceFactory(params: { [p: string]: unknown }): Promise<void> {

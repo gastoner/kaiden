@@ -1,5 +1,5 @@
 /**********************************************************************
- * Copyright (C) 2025 Red Hat, Inc.
+ * Copyright (C) 2025-2026 Red Hat, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -224,6 +224,74 @@ test('if there are multiple scopes with different values, make sure we get the r
   expect(resultDefault).toBe('defaultValue');
   const resultAdmin = configAdmin.get<string>('key');
   expect(resultAdmin).toBe('adminValue');
+});
+
+describe('inference provider connection scope', () => {
+  test('should return inference-connection key for inference provider connection scope', () => {
+    const inferenceConnection = {
+      id: 'conn-123',
+      name: 'http://localhost:11434/v1',
+      type: 'cloud',
+      sdk: {},
+      models: [],
+      status: vi.fn(),
+      credentials: vi.fn(),
+    };
+
+    const map = new Map<string, { [key: string]: unknown }>();
+    const config = new ConfigurationImpl(
+      { send: vi.fn() } as unknown as ApiSenderType,
+      vi.fn(),
+      map,
+      'openai.connection',
+      inferenceConnection as unknown as containerDesktopAPI.ConfigurationScope,
+    );
+
+    expect(config.getConfigurationKey()).toBe('inference-connection:conn-123');
+  });
+
+  test('should store and retrieve values scoped to an inference connection', () => {
+    const inferenceConnection = {
+      id: 'conn-456',
+      name: 'test-connection',
+      type: 'cloud',
+      sdk: {},
+      models: [],
+      status: vi.fn(),
+      credentials: vi.fn(),
+    };
+
+    const map = new Map<string, { [key: string]: unknown }>();
+    map.set('inference-connection:conn-456', { 'openai.connection._type': 'openai' });
+
+    const config = new ConfigurationImpl(
+      { send: vi.fn() } as unknown as ApiSenderType,
+      vi.fn(),
+      map,
+      'openai.connection',
+      inferenceConnection as unknown as containerDesktopAPI.ConfigurationScope,
+    );
+
+    expect(config.get<string>('_type')).toBe('openai');
+  });
+
+  test('should not confuse inference connection with container connection scope', () => {
+    const containerConnection = {
+      name: 'podman',
+      endpoint: { socketPath: '/var/run/podman.sock' },
+    };
+
+    const map = new Map<string, { [key: string]: unknown }>();
+    const config = new ConfigurationImpl(
+      { send: vi.fn() } as unknown as ApiSenderType,
+      vi.fn(),
+      map,
+      'test',
+      containerConnection as unknown as containerDesktopAPI.ConfigurationScope,
+    );
+
+    expect(config.getConfigurationKey()).toBe('container-connection:podman./var/run/podman.sock');
+  });
 });
 
 describe('locked configuration handling', () => {

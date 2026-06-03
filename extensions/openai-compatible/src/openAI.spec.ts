@@ -1,5 +1,5 @@
 /**********************************************************************
- * Copyright (C) 2025 Red Hat, Inc.
+ * Copyright (C) 2025-2026 Red Hat, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@ import { randomUUID } from 'node:crypto';
 import { createOpenAICompatible, type OpenAICompatibleProvider } from '@ai-sdk/openai-compatible';
 import type {
   CancellationToken,
+  Configuration,
+  configuration as ConfigurationAPI,
   Disposable,
   Logger,
   Provider,
@@ -29,7 +31,7 @@ import type {
 } from '@openkaiden/api';
 import { assert, beforeEach, describe, expect, test, vi } from 'vitest';
 
-import { OpenAI, type StoredConnection, TOKENS_KEY } from './openAI';
+import { OpenAI, PROVIDER_ID, type StoredConnection, TOKENS_KEY } from './openAI';
 
 vi.mock(import('node:crypto'));
 
@@ -68,6 +70,19 @@ const SECRET_STORAGE_MOCK: SecretStorage = {
   onDidChange: vi.fn(),
 };
 
+const CONFIG_UPDATE_MOCK = vi.fn();
+
+const CONFIGURATION_MOCK: Configuration = {
+  get: vi.fn(),
+  has: vi.fn(),
+  update: CONFIG_UPDATE_MOCK,
+} as unknown as Configuration;
+
+const CONFIGURATION_API_MOCK: typeof ConfigurationAPI = {
+  getConfiguration: vi.fn().mockReturnValue(CONFIGURATION_MOCK),
+  onDidChangeConfiguration: vi.fn(),
+} as unknown as typeof ConfigurationAPI;
+
 const fetchMock = vi.fn();
 
 global.fetch = fetchMock;
@@ -79,6 +94,7 @@ beforeEach(() => {
   vi.mocked(PROVIDER_API_MOCK.createProvider).mockReturnValue(PROVIDER_MOCK as Provider);
   vi.mocked(createOpenAICompatible).mockReturnValue(OPENAI_PROVIDER_MOCK);
   vi.mocked(SECRET_STORAGE_MOCK.get).mockResolvedValue(undefined);
+  vi.mocked(CONFIGURATION_API_MOCK.getConfiguration).mockReturnValue(CONFIGURATION_MOCK);
 
   fetchMock.mockResolvedValue({
     status: 200,
@@ -87,7 +103,7 @@ beforeEach(() => {
 });
 
 test('constructor should not do anything', async () => {
-  const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK);
+  const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
   expect(openai).instanceof(OpenAI);
 
   expect(PROVIDER_API_MOCK.createProvider).not.toHaveBeenCalled();
@@ -95,7 +111,7 @@ test('constructor should not do anything', async () => {
 
 describe('init', () => {
   test('should register provider', async () => {
-    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK);
+    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
     await openai.init();
 
     expect(PROVIDER_API_MOCK.createProvider).toHaveBeenCalledOnce();
@@ -107,7 +123,7 @@ describe('init', () => {
   });
 
   test('should register inference factory', async () => {
-    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK);
+    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
     await openai.init();
 
     expect(PROVIDER_MOCK.setInferenceProviderConnectionFactory).toHaveBeenCalledOnce();
@@ -118,7 +134,7 @@ describe('init', () => {
   });
 
   test('should not restore any connection if no secrets', async () => {
-    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK);
+    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
     await openai.init();
 
     expect(PROVIDER_MOCK.registerInferenceProviderConnection).not.toHaveBeenCalled();
@@ -128,7 +144,7 @@ describe('init', () => {
 describe('factory', () => {
   let create: (params: { [key: string]: unknown }, logger?: Logger, token?: CancellationToken) => Promise<void>;
   beforeEach(async () => {
-    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK);
+    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
     await openai.init();
 
     const mock = vi.mocked(PROVIDER_MOCK.setInferenceProviderConnectionFactory);
@@ -154,7 +170,6 @@ describe('factory', () => {
       'openai.factory.baseURL': 'http://localhost:11434/v1',
     });
 
-    expect(SECRET_STORAGE_MOCK.store).toHaveBeenCalledOnce();
     const expected: StoredConnection[] = [
       { id: 'fake-uuid-1', apiKey: 'dummyKey', baseURL: 'http://localhost:11434/v1' },
     ];
@@ -206,7 +221,7 @@ describe('connection delete lifecycle', () => {
       dispose: disposeMock,
     });
 
-    openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK);
+    openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
     await openai.init();
 
     // Get the create factory
@@ -225,14 +240,70 @@ describe('connection delete lifecycle', () => {
     mDelete = lifecycle.delete;
   });
 
-  test('calling delete should update secrets and dispose provider inference connection', async () => {
+  test('calling delete should update secrets, clear configuration, and dispose provider inference connection', async () => {
     await mDelete();
 
-    // secrets should have been updated at least twice (store on create, store on delete)
-    expect(SECRET_STORAGE_MOCK.store).toHaveBeenCalledTimes(2);
+    // per-connection secret should be deleted
+    expect(SECRET_STORAGE_MOCK.delete).toHaveBeenCalledWith(`${PROVIDER_ID}:fake-uuid-1:token`);
+
+    // configuration values should be cleared
+    expect(CONFIG_UPDATE_MOCK).toHaveBeenCalledWith('_type', undefined);
+    expect(CONFIG_UPDATE_MOCK).toHaveBeenCalledWith('token', undefined);
 
     // provider inference connection should be disposed
     expect(disposeMock).toHaveBeenCalledOnce();
+  });
+});
+
+describe('workspace configuration', () => {
+  beforeEach(async () => {
+    vi.mocked(PROVIDER_MOCK.registerInferenceProviderConnection).mockReturnValue({
+      dispose: vi.fn(),
+    });
+  });
+
+  test('should store per-connection secret and set configuration after registration', async () => {
+    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
+    await openai.init();
+
+    const mock = vi.mocked(PROVIDER_MOCK.setInferenceProviderConnectionFactory);
+    const create = mock.mock.calls[0][0].create;
+
+    await create({
+      'openai.factory.apiKey': 'dummyKey',
+      'openai.factory.baseURL': 'http://localhost:11434/v1',
+    });
+
+    // per-connection secret should be created
+    expect(SECRET_STORAGE_MOCK.store).toHaveBeenCalledWith(`${PROVIDER_ID}:fake-uuid-1:token`, 'dummyKey');
+
+    // configuration should be scoped to the connection object
+    const connection = vi.mocked(PROVIDER_MOCK.registerInferenceProviderConnection).mock.calls[0][0];
+    expect(CONFIGURATION_API_MOCK.getConfiguration).toHaveBeenCalledWith('openai.connection', connection);
+
+    // _type and token should be set
+    expect(CONFIG_UPDATE_MOCK).toHaveBeenCalledWith('_type', PROVIDER_ID);
+    expect(CONFIG_UPDATE_MOCK).toHaveBeenCalledWith('token', `${PROVIDER_ID}:fake-uuid-1:token`);
+  });
+
+  test('should set workspace configuration for each restored connection', async () => {
+    const stored: StoredConnection[] = [
+      { id: 'id-1', apiKey: 'key1', baseURL: 'http://a/v1' },
+      { id: 'id-2', apiKey: 'key2', baseURL: 'http://b/v1' },
+    ];
+    vi.mocked(SECRET_STORAGE_MOCK.get).mockResolvedValue(JSON.stringify(stored));
+
+    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
+    await openai.init();
+
+    // per-connection secrets should be created for each connection
+    expect(SECRET_STORAGE_MOCK.store).toHaveBeenCalledWith(`${PROVIDER_ID}:id-1:token`, 'key1');
+    expect(SECRET_STORAGE_MOCK.store).toHaveBeenCalledWith(`${PROVIDER_ID}:id-2:token`, 'key2');
+
+    // configuration should be set for each connection
+    expect(CONFIG_UPDATE_MOCK).toHaveBeenCalledWith('_type', PROVIDER_ID);
+    expect(CONFIG_UPDATE_MOCK).toHaveBeenCalledWith('token', `${PROVIDER_ID}:id-1:token`);
+    expect(CONFIG_UPDATE_MOCK).toHaveBeenCalledWith('token', `${PROVIDER_ID}:id-2:token`);
   });
 });
 
@@ -244,7 +315,7 @@ describe('restoreConnections', () => {
     ];
     vi.mocked(SECRET_STORAGE_MOCK.get).mockResolvedValue(JSON.stringify(stored));
 
-    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK);
+    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
     await openai.init();
 
     expect(PROVIDER_MOCK.registerInferenceProviderConnection).toHaveBeenCalledTimes(2);
@@ -272,7 +343,7 @@ describe('restoreConnections', () => {
     vi.mocked(SECRET_STORAGE_MOCK.get).mockResolvedValue(JSON.stringify(stored));
     fetchMock.mockResolvedValueOnce({ status: 500, json: async () => ({}) });
 
-    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK);
+    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
     await openai.init();
 
     expect(PROVIDER_MOCK.registerInferenceProviderConnection).toHaveBeenCalledTimes(2);
@@ -292,7 +363,7 @@ describe('restoreConnections', () => {
       .mockReturnValueOnce('migrated-id-2' as ReturnType<typeof randomUUID>);
     vi.mocked(SECRET_STORAGE_MOCK.get).mockResolvedValue('key1|http://a/v1,key2|http://b/v1');
 
-    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK);
+    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
     await openai.init();
 
     const expected: StoredConnection[] = [
@@ -312,7 +383,7 @@ describe('restoreConnections', () => {
 
 describe('listModels error handling (through factory)', () => {
   test('non-200 response should return undefined', async () => {
-    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK);
+    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
     await openai.init();
 
     const mock = vi.mocked(PROVIDER_MOCK.setInferenceProviderConnectionFactory);
@@ -326,7 +397,7 @@ describe('listModels error handling (through factory)', () => {
   });
 
   test('missing data field should return undefined', async () => {
-    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK);
+    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
     await openai.init();
 
     const mock = vi.mocked(PROVIDER_MOCK.setInferenceProviderConnectionFactory);
@@ -340,7 +411,7 @@ describe('listModels error handling (through factory)', () => {
   });
 
   test('data not array should return undefined', async () => {
-    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK);
+    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
     await openai.init();
 
     const mock = vi.mocked(PROVIDER_MOCK.setInferenceProviderConnectionFactory);
@@ -356,7 +427,7 @@ describe('listModels error handling (through factory)', () => {
 
 describe('duplicate connection prevention', () => {
   test('creating the same connection twice should throw', async () => {
-    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK);
+    const openai = new OpenAI(PROVIDER_API_MOCK, SECRET_STORAGE_MOCK, CONFIGURATION_API_MOCK);
     await openai.init();
 
     const mock = vi.mocked(PROVIDER_MOCK.setInferenceProviderConnectionFactory);

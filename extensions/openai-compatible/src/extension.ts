@@ -1,5 +1,5 @@
 /**********************************************************************
- * Copyright (C) 2025 Red Hat, Inc.
+ * Copyright (C) 2025-2026 Red Hat, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,14 +17,14 @@
  ***********************************************************************/
 
 import type { ExtensionContext } from '@openkaiden/api';
-import { provider } from '@openkaiden/api';
+import { configuration, provider } from '@openkaiden/api';
 
 import { OpenAI } from './openAI';
 
 export async function activate(extensionContext: ExtensionContext): Promise<void> {
   console.log('starting openAI extension');
 
-  const openai = new OpenAI(provider, extensionContext.secrets);
+  const openai = new OpenAI(provider, extensionContext.secrets, configuration);
   extensionContext.subscriptions.push(openai);
 
   await openai.init();
