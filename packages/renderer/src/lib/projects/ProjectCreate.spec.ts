@@ -1,0 +1,136 @@
+/**********************************************************************
+ * Copyright (C) 2026 Red Hat, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ***********************************************************************/
+
+import '@testing-library/jest-dom/vitest';
+
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { writable } from 'svelte/store';
+import { beforeEach, expect, test, vi } from 'vitest';
+
+import * as skillsStore from '/@/stores/skills';
+import type { SkillInfo } from '/@api/skill/skill-info';
+import type { WorkspaceProjectAnalysis, WorkspaceProjectInfo } from '/@api/workspace-project-info';
+
+import ProjectCreate from './ProjectCreate.svelte';
+
+vi.mock(import('/@/navigation'));
+vi.mock(import('/@/stores/skills'));
+
+const SAMPLE_SKILLS: SkillInfo[] = [
+  { name: 'code-review', description: 'Reviews code', path: '/skills/code-review', enabled: true, managed: false },
+  { name: 'testing', description: 'Writes tests', path: '/skills/testing', enabled: true, managed: true },
+  { name: 'disabled-skill', description: 'Disabled', path: '/skills/disabled', enabled: false, managed: true },
+];
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  HTMLElement.prototype.animate = vi.fn().mockReturnValue({
+    finished: Promise.resolve(),
+    cancel: vi.fn(),
+    onfinish: null,
+  });
+  vi.mocked(skillsStore).skillInfos = writable<readonly SkillInfo[]>(SAMPLE_SKILLS);
+});
+
+test('wizard displays 3 steps in stepper', () => {
+  render(ProjectCreate);
+
+  expect(screen.getAllByText('Source').length).toBeGreaterThanOrEqual(1);
+  expect(screen.getByText('Skills')).toBeInTheDocument();
+  expect(screen.getByText('Review')).toBeInTheDocument();
+});
+
+test('step counter shows Step 1 of 3', () => {
+  render(ProjectCreate);
+
+  expect(screen.getByText('Step 1 of 3')).toBeInTheDocument();
+});
+
+test('navigates to skills step after analyze with local path', async () => {
+  const analysisResult: WorkspaceProjectAnalysis = {
+    name: 'my-project',
+    description: 'A project',
+    folder: '/home/user/my-project',
+  };
+  vi.mocked(window.analyzeWorkspaceProject).mockResolvedValue(analysisResult);
+
+  render(ProjectCreate);
+
+  const input = screen.getByPlaceholderText('/home/user/dev/my-project');
+  await fireEvent.input(input, { target: { value: '/home/user/my-project' } });
+
+  const analyzeButton = screen.getByText('Analyze');
+  await fireEvent.click(analyzeButton);
+
+  await waitFor(() => {
+    expect(screen.getByText('Step 2 of 3')).toBeInTheDocument();
+  });
+});
+
+test('skills step shows all enabled skills selected by default after analyze', async () => {
+  const analysisResult: WorkspaceProjectAnalysis = {
+    name: 'my-project',
+    folder: '/home/user/my-project',
+  };
+  vi.mocked(window.analyzeWorkspaceProject).mockResolvedValue(analysisResult);
+
+  render(ProjectCreate);
+
+  const input = screen.getByPlaceholderText('/home/user/dev/my-project');
+  await fireEvent.input(input, { target: { value: '/home/user/my-project' } });
+  await fireEvent.click(screen.getByText('Analyze'));
+
+  await waitFor(() => {
+    expect(screen.getByText(/2\/2 skills/)).toBeInTheDocument();
+  });
+});
+
+test('passes selected skills to createWorkspaceProject', async () => {
+  const analysisResult: WorkspaceProjectAnalysis = {
+    name: 'my-project',
+    folder: '/home/user/my-project',
+  };
+  vi.mocked(window.analyzeWorkspaceProject).mockResolvedValue(analysisResult);
+  vi.mocked(window.createWorkspaceProject).mockResolvedValue({} as unknown as WorkspaceProjectInfo);
+
+  render(ProjectCreate);
+
+  const input = screen.getByPlaceholderText('/home/user/dev/my-project');
+  await fireEvent.input(input, { target: { value: '/home/user/my-project' } });
+  await fireEvent.click(screen.getByText('Analyze'));
+
+  await waitFor(() => {
+    expect(screen.getByText('Step 2 of 3')).toBeInTheDocument();
+  });
+
+  await fireEvent.click(screen.getByText('Continue'));
+
+  await waitFor(() => {
+    expect(screen.getByText('Step 3 of 3')).toBeInTheDocument();
+  });
+
+  await fireEvent.click(screen.getByText('Create Project'));
+
+  await waitFor(() => {
+    expect(window.createWorkspaceProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skills: ['code-review', 'testing'],
+      }),
+    );
+  });
+});

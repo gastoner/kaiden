@@ -2,18 +2,22 @@
 import { Button } from '@podman-desktop/ui-svelte';
 import { toast } from 'svelte-sonner';
 
+import type { ChecklistItem } from '/@/lib/ui/ChecklistPanel.svelte';
 import FormPage from '/@/lib/ui/FormPage.svelte';
 import WizardStepper from '/@/lib/ui/WizardStepper.svelte';
 import { handleNavigation } from '/@/navigation';
+import { skillInfos } from '/@/stores/skills';
 import { NavigationPage } from '/@api/navigation-page';
 import type { WorkspaceProjectAnalysis } from '/@api/workspace-project-info';
 
 import { extractRepoName, extractRepoSlug, formatGitUrl } from './git-url-utils';
 import ProjectCreateStepReview from './ProjectCreateStepReview.svelte';
+import ProjectCreateStepSkills from './ProjectCreateStepSkills.svelte';
 import ProjectCreateStepSource from './ProjectCreateStepSource.svelte';
 
 const wizardSteps = [
   { id: 'source', title: 'Source' },
+  { id: 'skills', title: 'Skills' },
   { id: 'review', title: 'Review' },
 ];
 
@@ -31,6 +35,19 @@ let projectName = $state('');
 let projectDescription = $state('');
 let cloneTo = $state('');
 let error = $state('');
+
+let selectedSkillIds = $state<string[]>([]);
+
+let skillItems: ChecklistItem[] = $derived(
+  $skillInfos
+    .filter(s => s.enabled)
+    .map(s => ({
+      id: s.name,
+      name: s.name,
+      description: s.description,
+      group: s.managed ? 'Custom' : 'Pre-built',
+    })),
+);
 
 let isGitSource = $derived(gitUrl.trim() !== '' && sourcePath.trim() === '');
 let gitRepoDisplay = $derived(formatGitUrl(gitUrl));
@@ -84,12 +101,17 @@ async function handleBrowseCloneTo(): Promise<void> {
   }
 }
 
+function initializeSkillSelection(): void {
+  selectedSkillIds = $skillInfos.filter(s => s.enabled).map(s => s.name);
+}
+
 async function handleAnalyze(): Promise<void> {
   if (isGitSource) {
     projectName = extractRepoName(gitUrl);
     projectDescription = 'Cloned from remote repository.';
     cloneTo = '';
     analysis = undefined;
+    initializeSkillSelection();
     currentStepIndex = 1;
     return;
   }
@@ -103,6 +125,7 @@ async function handleAnalyze(): Promise<void> {
     analysis = result;
     projectName = result.name;
     projectDescription = result.description ?? '';
+    initializeSkillSelection();
     currentStepIndex = 1;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -138,7 +161,7 @@ async function createProject(): Promise<void> {
       name: projectName.trim(),
       description: projectDescription.trim() || undefined,
       folder,
-      skills: [],
+      skills: [...selectedSkillIds],
       mcpServers: [],
       knowledges: [],
       secrets: [],
@@ -181,6 +204,11 @@ async function createProject(): Promise<void> {
                 bind:gitUrl={gitUrl}
                 onBrowseSource={handleBrowseSource}
               />
+            {:else if currentStepId === 'skills'}
+              <ProjectCreateStepSkills
+                {skillItems}
+                bind:selectedSkillIds={selectedSkillIds}
+              />
             {:else if currentStepId === 'review'}
               <ProjectCreateStepReview
                 {analysis}
@@ -217,6 +245,8 @@ async function createProject(): Promise<void> {
                     Create Project
                   {/if}
                 </Button>
+              {:else}
+                <Button onclick={(): void => { currentStepIndex++; }}>Continue</Button>
               {/if}
             </div>
           </div>
