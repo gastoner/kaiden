@@ -1,6 +1,7 @@
 <script lang="ts">
-import { faCloud, faDesktop, faIndustry } from '@fortawesome/free-solid-svg-icons';
+import { faCloud, faDesktop, faDiagramProject, faIndustry } from '@fortawesome/free-solid-svg-icons';
 import {
+  Button,
   FilteredEmptyScreen,
   SearchInput,
   SettingsNavItem,
@@ -19,6 +20,7 @@ import LocalRuntimeTiles from '/@/lib/models/LocalRuntimeTiles.svelte';
 import type { CatalogModelInfo, InferenceConnectionSummary } from '/@/lib/models/models-utils';
 import ModelsCatalogEmptyScreen from '/@/lib/models/ModelsCatalogEmptyScreen.svelte';
 import ProviderConnectionTiles from '/@/lib/models/ProviderConnectionTiles.svelte';
+import SemanticRouterCards from '/@/lib/models/SemanticRouterCards.svelte';
 import NoLogIcon from '/@/lib/ui/NoLogIcon.svelte';
 import {
   cloudConnectionSummaries as cloudConnectionSummariesStore,
@@ -26,9 +28,11 @@ import {
   localConnectionSummaries as localConnectionSummariesStore,
 } from '/@/stores/inference-connection-summaries';
 import { cloudCatalogModels, inHouseCatalogModels, localCatalogModels } from '/@/stores/models';
+import { semanticRouterInfos } from '/@/stores/semantic-routers';
+import type { SemanticRouterConfigInfo } from '/@api/semantic-router-info';
 
 type ModelSelectable = CatalogModelInfo & { selected: boolean };
-type Category = 'cloud' | 'corporate' | 'local';
+type Category = 'cloud' | 'corporate' | 'local' | 'router';
 
 interface CategoryInfo {
   id: Category;
@@ -41,6 +45,12 @@ const categories: CategoryInfo[] = [
   { id: 'cloud', label: 'LLM Providers', icon: faCloud, subtitle: 'API keys for hosted providers' },
   { id: 'corporate', label: 'In-house', icon: faIndustry, subtitle: 'In-house · OpenShift AI & models' },
   { id: 'local', label: 'Local', icon: faDesktop, subtitle: 'Host detection & loaded models' },
+  {
+    id: 'router',
+    label: 'Semantic Routers',
+    icon: faDiagramProject,
+    subtitle: 'Intelligent request routers across multiple backends',
+  },
 ];
 
 let activeCategory: Category = $state('cloud');
@@ -71,6 +81,9 @@ let filteredLocalModels: ModelSelectable[] = $derived(
 let filteredLocalConnections: InferenceConnectionSummary[] = $derived(
   filterConnectionsBySearch(localConnections, searchTerm),
 );
+
+let semanticRouters: SemanticRouterConfigInfo[] = $derived($semanticRouterInfos as SemanticRouterConfigInfo[]);
+let filteredRouters: SemanticRouterConfigInfo[] = $derived(filterRoutersBySearch(semanticRouters, searchTerm));
 
 let activeSubtitle: string = $derived(categories.find(c => c.id === activeCategory)?.subtitle ?? '');
 
@@ -130,6 +143,25 @@ function filterConnectionsBySearch(conns: InferenceConnectionSummary[], term: st
       (c.connectionType?.toLowerCase().includes(q) ?? false),
   );
 }
+
+function filterRoutersBySearch(routers: SemanticRouterConfigInfo[], term: string): SemanticRouterConfigInfo[] {
+  if (!term.trim()) return routers;
+  const q = term.trim().toLowerCase();
+  return routers.filter(
+    r =>
+      r.name.toLowerCase().includes(q) ||
+      (r.description?.toLowerCase().includes(q) ?? false) ||
+      r.routing.keywords.some(k => k.name.toLowerCase().includes(q)) ||
+      r.routing.decisions.some(
+        d =>
+          d.name.toLowerCase().includes(q) ||
+          d.rules.some(rule => rule.modelRefs.some(m => m.label.toLowerCase().includes(q))),
+      ),
+  );
+}
+
+// TODO: implement router creation flow
+function addSemanticRouter(): void {}
 
 function selectCategory(cat: Category): void {
   activeCategory = cat;
@@ -265,6 +297,30 @@ function selectCategory(cat: Category): void {
                   <Table kind="models" data={filteredLocalModels} columns={columns} row={row} defaultSortColumn="Name" />
                 </div>
               {/if}
+            {/if}
+          </div>
+        </div>
+      {:else if activeCategory === 'router'}
+        <div class="flex items-center justify-between px-5 pb-3">
+          <p class="text-xs text-[var(--pd-content-text)] opacity-70">
+            Semantic routers classify incoming requests and route them to the appropriate backend models based on keyword rules and priorities.
+          </p>
+          <Button onclick={addSemanticRouter}>Add Semantic Router</Button>
+        </div>
+        <div class="flex min-w-full h-full">
+          <div class="flex flex-col w-full">
+            {#if semanticRouters.length === 0}
+              <div class="flex items-center justify-center h-full">
+                <div class="text-center text-[var(--pd-content-text)]">
+                  <Icon icon={faDiagramProject} class="mb-3 opacity-40" size="2.5em" />
+                  <p class="text-sm">No semantic routers configured</p>
+                  <p class="text-xs mt-1 opacity-60">Add a router to classify and route requests across multiple backends</p>
+                </div>
+              </div>
+            {:else if searchTerm && filteredRouters.length === 0}
+              <FilteredEmptyScreen icon={NoLogIcon} kind="routers" bind:searchTerm />
+            {:else}
+              <SemanticRouterCards routers={filteredRouters} />
             {/if}
           </div>
         </div>
