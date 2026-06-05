@@ -66,6 +66,8 @@ export interface OpenshellGatewayStartOptions {
   port?: number;
   bindAddress?: string;
   disableTls?: boolean;
+  /** Skip CLI registration when restarting an already-registered gateway. */
+  skipRegistration?: boolean;
 }
 
 export interface GatewaySandboxes {

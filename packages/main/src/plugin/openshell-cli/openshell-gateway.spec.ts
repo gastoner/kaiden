@@ -46,7 +46,6 @@ function createMockChildProcess(): ChildProcess & { _stdout: EventEmitter; _stde
   Object.defineProperty(proc, 'stdout', { get: (): EventEmitter => proc._stdout });
   Object.defineProperty(proc, 'stderr', { get: (): EventEmitter => proc._stderr });
   proc.kill = vi.fn().mockReturnValue(true);
-  Object.defineProperty(proc, 'exitCode', { value: undefined, writable: true, configurable: true });
   return proc;
 }
 
@@ -63,6 +62,7 @@ const cliToolRegistry = {
 
 const openshellCli = {
   listGateways: vi.fn(),
+  selectGateway: vi.fn(),
 } as unknown as OpenshellCli;
 
 beforeEach(() => {
@@ -75,14 +75,29 @@ beforeEach(() => {
 });
 
 describe('init', () => {
-  test('skips auto-start when existing gateways are discovered', async () => {
+  test('skips auto-start when existing gateway is healthy and already active', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const existingGateways: GatewayInfo[] = [{ name: 'remote-gw', endpoint: 'https://gw.example.com', active: true }];
     vi.mocked(openshellCli.listGateways).mockResolvedValue(existingGateways);
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(''));
 
     await gateway.init();
 
     expect(openshellCli.listGateways).toHaveBeenCalled();
+    expect(exec.exec).toHaveBeenCalledWith(CLI_BINARY, ['status', '--gateway-endpoint', 'https://gw.example.com']);
+    expect(spawn).not.toHaveBeenCalled();
+    expect(openshellCli.selectGateway).not.toHaveBeenCalled();
+  });
+
+  test('selects healthy gateway when it is not active', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const existingGateways: GatewayInfo[] = [{ name: 'kaiden-alt', endpoint: 'http://127.0.0.1:18080', active: false }];
+    vi.mocked(openshellCli.listGateways).mockResolvedValue(existingGateways);
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(''));
+
+    await gateway.init();
+
+    expect(openshellCli.selectGateway).toHaveBeenCalledWith('kaiden-alt');
     expect(spawn).not.toHaveBeenCalled();
   });
 
@@ -149,6 +164,54 @@ describe('init', () => {
       expect.arrayContaining(['--port', '17670']),
       expect.objectContaining({ detached: false }),
     );
+  });
+
+  test('returns without spawning when at least one gateway is healthy among multiple', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const gateways: GatewayInfo[] = [
+      { name: 'gw-stopped', endpoint: 'http://127.0.0.1:8080', active: false },
+      { name: 'gw-healthy', endpoint: 'http://127.0.0.1:9090', active: true },
+    ];
+    vi.mocked(openshellCli.listGateways).mockResolvedValue(gateways);
+    vi.mocked(exec.exec)
+      .mockRejectedValueOnce(new Error('connection refused'))
+      .mockResolvedValueOnce(mockExecResult(''));
+
+    await gateway.init();
+
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  test('creates new gateway when existing gateways are unreachable', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const gateways: GatewayInfo[] = [{ name: 'broken-gw', endpoint: 'http://127.0.0.1:19999', active: true }];
+    vi.mocked(openshellCli.listGateways).mockResolvedValue(gateways);
+    const proc = createMockChildProcess();
+    vi.mocked(spawn).mockReturnValue(proc);
+    vi.mocked(exec.exec)
+      .mockRejectedValueOnce(new Error('connection refused'))
+      .mockRejectedValueOnce(new Error('connection refused'))
+      .mockResolvedValue(mockExecResult(''));
+
+    await gateway.init();
+
+    expect(spawn).toHaveBeenCalledWith(
+      GATEWAY_BINARY,
+      expect.arrayContaining(['--port', '17670']),
+      expect.objectContaining({ detached: false }),
+    );
+  });
+
+  test('does not pass --gateway-insecure for https endpoints during health check', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const gateways: GatewayInfo[] = [{ name: 'tls-gw', endpoint: 'https://gw.example.com:8443', active: true }];
+    vi.mocked(openshellCli.listGateways).mockResolvedValue(gateways);
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(''));
+
+    await gateway.init();
+
+    expect(exec.exec).toHaveBeenCalledWith(CLI_BINARY, ['status', '--gateway-endpoint', 'https://gw.example.com:8443']);
   });
 });
 
@@ -263,6 +326,18 @@ describe('start', () => {
       '--name',
       'kaiden-local',
     ]);
+  });
+
+  test('skips registerWithCli when skipRegistration is true', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const proc = createMockChildProcess();
+    vi.mocked(spawn).mockReturnValue(proc);
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(''));
+
+    await gateway.start({ skipRegistration: true });
+
+    expect(spawn).toHaveBeenCalled();
+    expect(exec.exec).not.toHaveBeenCalledWith(CLI_BINARY, expect.arrayContaining(['gateway', 'add']));
   });
 });
 
