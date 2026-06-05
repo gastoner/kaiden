@@ -19,11 +19,49 @@
 import '@testing-library/jest-dom/vitest';
 
 import { render, screen } from '@testing-library/svelte';
-import { expect, test } from 'vitest';
+import { writable } from 'svelte/store';
+import { beforeEach, expect, test, vi } from 'vitest';
 
+import type { CatalogModelInfo } from '/@/lib/models/models-utils';
+import * as modelsStore from '/@/stores/models';
 import type { SemanticRouterConfigInfo } from '/@api/semantic-router-info';
 
 import SemanticRouterCards from './SemanticRouterCards.svelte';
+
+vi.mock(import('/@/stores/models'));
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(modelsStore).catalogModels = writable<CatalogModelInfo[]>([
+    {
+      providerId: 'ollama',
+      connectionId: 'conn-2',
+      connectionName: 'Ollama',
+      type: 'local',
+      label: 'qwen3-coder',
+      connectionStatus: 'started',
+      providerName: 'Ollama',
+    },
+    {
+      providerId: 'gemini',
+      connectionId: 'conn-1',
+      connectionName: 'Gemini',
+      type: 'cloud',
+      label: 'gemini-2.5-pro',
+      connectionStatus: 'started',
+      providerName: 'Gemini',
+    },
+    {
+      providerId: 'openshift-ai',
+      connectionId: 'conn-3',
+      connectionName: 'OpenShift AI',
+      type: 'self-hosted',
+      label: 'llama-3.1-70b',
+      connectionStatus: 'started',
+      providerName: 'OpenShift AI',
+    },
+  ]);
+});
 
 const mockRouter: SemanticRouterConfigInfo = {
   name: 'coding-router',
@@ -119,6 +157,35 @@ test('should show cloud badge for gemini provider', () => {
   render(SemanticRouterCards, { routers: [mockRouter] });
 
   expect(screen.getByText('cloud')).toBeInTheDocument();
+});
+
+test('should show in-house badge for self-hosted provider', () => {
+  const routerWithSelfHosted: SemanticRouterConfigInfo = {
+    name: 'corp-router',
+    listeners: [{ address: '0.0.0.0', port: 9000 }],
+    routing: {
+      keywords: [],
+      decisions: [
+        {
+          name: 'decision-1',
+          priority: 1,
+          rules: [
+            {
+              operator: 'OR',
+              conditions: [],
+              modelRefs: [
+                { providerId: 'openshift-ai', connectionId: 'c1', label: 'llama-3.1-70b', useReasoning: false },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  render(SemanticRouterCards, { routers: [routerWithSelfHosted] });
+
+  expect(screen.getByText('in-house')).toBeInTheDocument();
 });
 
 test('should deduplicate model refs across rules', () => {

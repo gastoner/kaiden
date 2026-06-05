@@ -157,7 +157,7 @@ function getKeywordGroupNames(router: SemanticRouterConfigInfo): string[] {
                 class:bg-[color-mix(in_srgb,var(--pd-state-warning)_10%,transparent)]={ref.type === 'self-hosted'}
                 class:text-[var(--pd-state-warning)]={ref.type === 'self-hosted'}
                 class:border-[color-mix(in_srgb,var(--pd-state-warning)_20%,transparent)]={ref.type === 'self-hosted'}>
-                {ref.type}
+                {ref.type === 'self-hosted' ? 'in-house' : ref.type}
               </span>
             </div>
           {/each}
