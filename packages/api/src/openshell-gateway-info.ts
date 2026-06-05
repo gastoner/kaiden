@@ -72,3 +72,17 @@ export interface GatewaySandboxes {
   gateway: GatewayInfo;
   sandboxes: SandboxInfo[];
 }
+
+export const OpenshellProviderInfoSchema = z.object({
+  name: z.string(),
+  type: z.string(),
+});
+
+export type OpenshellProviderInfo = z.output<typeof OpenshellProviderInfoSchema>;
+
+export interface CreateProviderOptions {
+  name: string;
+  type: string;
+  credentials: Record<string, string>;
+  config?: Record<string, string>;
+}

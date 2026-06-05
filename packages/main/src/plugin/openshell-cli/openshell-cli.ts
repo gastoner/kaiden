@@ -23,13 +23,15 @@ import z from 'zod';
 import { CliToolRegistry } from '/@/plugin/cli-tool-registry.js';
 import { Exec } from '/@/plugin/util/exec.js';
 import type {
+  CreateProviderOptions,
   CreateSandboxOptions,
   GatewayAddOptions,
   GatewayInfo,
   GatewaySandboxes,
+  OpenshellProviderInfo,
   SandboxInfo,
 } from '/@api/openshell-gateway-info.js';
-import { GatewayInfoSchema, SandboxInfoSchema } from '/@api/openshell-gateway-info.js';
+import { GatewayInfoSchema, OpenshellProviderInfoSchema, SandboxInfoSchema } from '/@api/openshell-gateway-info.js';
 
 /**
  * Low-level wrapper around the `openshell` CLI binary.
@@ -49,6 +51,11 @@ import { GatewayInfoSchema, SandboxInfoSchema } from '/@api/openshell-gateway-in
  *   - `openshell gateway select [name]`
  *   - `openshell gateway list`
  *   - `openshell status`
+ *
+ * Provider commands:
+ *   - `openshell provider list`
+ *   - `openshell provider delete <name>`
+ *   - `openshell provider create`
  */
 @injectable()
 export class OpenshellCli {
@@ -254,18 +261,56 @@ export class OpenshellCli {
     }
   }
 
+  // ── provider commands ──────────────────────────────────────────────
+
+  async listProviders(): Promise<OpenshellProviderInfo[]> {
+    const data = await this.execCLI<unknown>(['provider', 'list']);
+    return z.array(OpenshellProviderInfoSchema).parse(data);
+  }
+
+  async deleteProvider(name: string): Promise<void> {
+    await this.runCli(['provider', 'delete', name]);
+  }
+
+  async createProvider(options: CreateProviderOptions): Promise<void> {
+    if (Object.keys(options.credentials).length === 0) {
+      throw new Error('credentials must not be empty');
+    }
+    const args = ['provider', 'create', '--name', options.name, '--type', options.type];
+    for (const [key, value] of Object.entries(options.credentials)) {
+      args.push('--credential', `${key}=${value}`);
+    }
+    if (options.config) {
+      for (const [key, value] of Object.entries(options.config)) {
+        args.push('--config', `${key}=${value}`);
+      }
+    }
+    await this.runCli(args, { redact: true });
+  }
+
   // ── helpers ───────────────────────────────────────────────────────
 
-  private async runCli(args: string[]): Promise<void> {
+  private async runCli(args: string[], options?: { redact?: boolean }): Promise<void> {
     const cliPath = this.getCliPath();
-    console.log(`Executing: ${cliPath} ${args.join(' ')}`);
+    const displayArgs = options?.redact ? this.redactSensitiveArgs(args) : args;
+    console.log(`Executing: ${cliPath} ${displayArgs.join(' ')}`);
     try {
       await this.exec.exec(cliPath, args);
     } catch (err: unknown) {
       const detail = this.extractCliError(err);
-      console.error(`openshell failed: ${cliPath} ${args.join(' ')} — ${detail}`);
+      console.error(`openshell failed: ${cliPath} ${displayArgs.join(' ')} — ${detail}`);
       throw new Error(detail);
     }
+  }
+
+  private redactSensitiveArgs(args: string[]): string[] {
+    const sensitiveFlags = new Set(['--credential', '--config']);
+    return args.map((arg, i) => {
+      if (i > 0 && sensitiveFlags.has(args[i - 1]!)) {
+        return '***';
+      }
+      return arg;
+    });
   }
 
   private async execCLI<T>(args: string[], options?: RunOptions): Promise<T> {

@@ -556,3 +556,170 @@ describe('getGatewayStatus', () => {
     await expect(openshellCli.getGatewayStatus()).rejects.toThrow('no gateway configured');
   });
 });
+
+describe('listProviders', () => {
+  test('executes provider list with json output and returns parsed result', async () => {
+    const payload = [
+      { name: 'my-openai', type: 'openai' },
+      { name: 'my-anthropic', type: 'anthropic' },
+    ];
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify(payload)));
+
+    const result = await openshellCli.listProviders();
+
+    expect(exec.exec).toHaveBeenCalledWith(OPENSHELL_CLI_PATH, ['provider', 'list', '-o', 'json'], undefined);
+    expect(result).toEqual(payload);
+  });
+
+  test('returns empty array when no providers exist', async () => {
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(JSON.stringify([])));
+
+    const result = await openshellCli.listProviders();
+
+    expect(result).toEqual([]);
+  });
+
+  test('rejects when CLI fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(exec.exec).mockRejectedValue(new Error('no gateway configured'));
+
+    await expect(openshellCli.listProviders()).rejects.toThrow('no gateway configured');
+  });
+});
+
+describe('deleteProvider', () => {
+  test('executes provider delete with name', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(''));
+
+    await openshellCli.deleteProvider('my-openai');
+
+    expect(exec.exec).toHaveBeenCalledWith(OPENSHELL_CLI_PATH, ['provider', 'delete', 'my-openai']);
+  });
+
+  test('rejects when CLI fails', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(exec.exec).mockRejectedValue(new Error('provider not found: unknown'));
+
+    await expect(openshellCli.deleteProvider('unknown')).rejects.toThrow('provider not found: unknown');
+  });
+});
+
+describe('createProvider', () => {
+  test('executes provider create with name, type, and credentials', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(''));
+
+    await openshellCli.createProvider({
+      name: 'my-openai',
+      type: 'openai',
+      credentials: { apiKey: 'sk-123' },
+    });
+
+    expect(exec.exec).toHaveBeenCalledWith(OPENSHELL_CLI_PATH, [
+      'provider',
+      'create',
+      '--name',
+      'my-openai',
+      '--type',
+      'openai',
+      '--credential',
+      'apiKey=sk-123',
+    ]);
+  });
+
+  test('includes multiple credential entries', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(''));
+
+    await openshellCli.createProvider({
+      name: 'my-provider',
+      type: 'custom',
+      credentials: { apiKey: 'key-1', secret: 'sec-2' },
+    });
+
+    expect(exec.exec).toHaveBeenCalledWith(OPENSHELL_CLI_PATH, [
+      'provider',
+      'create',
+      '--name',
+      'my-provider',
+      '--type',
+      'custom',
+      '--credential',
+      'apiKey=key-1',
+      '--credential',
+      'secret=sec-2',
+    ]);
+  });
+
+  test('includes optional config keys', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(''));
+
+    await openshellCli.createProvider({
+      name: 'my-openai',
+      type: 'openai',
+      credentials: { apiKey: 'sk-123' },
+      config: { model: 'gpt-4', temperature: '0.7' },
+    });
+
+    expect(exec.exec).toHaveBeenCalledWith(OPENSHELL_CLI_PATH, [
+      'provider',
+      'create',
+      '--name',
+      'my-openai',
+      '--type',
+      'openai',
+      '--credential',
+      'apiKey=sk-123',
+      '--config',
+      'model=gpt-4',
+      '--config',
+      'temperature=0.7',
+    ]);
+  });
+
+  test('rejects when credentials are empty', async () => {
+    await expect(
+      openshellCli.createProvider({
+        name: 'my-openai',
+        type: 'openai',
+        credentials: {},
+      }),
+    ).rejects.toThrow('credentials must not be empty');
+
+    expect(exec.exec).not.toHaveBeenCalled();
+  });
+
+  test('redacts credential and config values in logs', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.mocked(exec.exec).mockResolvedValue(mockExecResult(''));
+
+    await openshellCli.createProvider({
+      name: 'my-openai',
+      type: 'openai',
+      credentials: { apiKey: 'sk-secret-123' },
+      config: { model: 'gpt-4' },
+    });
+
+    const loggedMessage = logSpy.mock.calls[0]?.[0] as string;
+    expect(loggedMessage).not.toContain('sk-secret-123');
+    expect(loggedMessage).not.toContain('gpt-4');
+    expect(loggedMessage).toContain('***');
+  });
+
+  test('rejects when CLI fails', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(exec.exec).mockRejectedValue(new Error('provider type not supported'));
+
+    await expect(
+      openshellCli.createProvider({
+        name: 'bad',
+        type: 'unsupported',
+        credentials: { key: 'val' },
+      }),
+    ).rejects.toThrow('provider type not supported');
+  });
+});
