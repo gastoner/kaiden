@@ -1,0 +1,119 @@
+/**********************************************************************
+ * Copyright (C) 2026 Red Hat, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ***********************************************************************/
+
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+
+import type { CliToolRegistry } from '/@/plugin/cli-tool-registry.js';
+import { OpenshellCli } from '/@/plugin/openshell-cli/openshell-cli.js';
+import type { Exec } from '/@/plugin/util/exec.js';
+import type { SecretCreateOptions } from '/@api/secret-info.js';
+
+import { OpenshellSecretAdapter } from './openshell-secret-adapter.js';
+
+vi.mock(import('/@/plugin/openshell-cli/openshell-cli.js'));
+
+let adapter: OpenshellSecretAdapter;
+const openshellCli = new OpenshellCli({} as Exec, {} as CliToolRegistry);
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  adapter = new OpenshellSecretAdapter(openshellCli);
+});
+
+describe('createSecret', () => {
+  const defaultOptions: SecretCreateOptions = {
+    name: 'my-secret',
+    type: 'github',
+    value: 'ghp_abc123',
+  };
+
+  test('delegates to openshellCli.createProvider and returns the secret name', async () => {
+    vi.mocked(openshellCli.createProvider).mockResolvedValue(undefined);
+
+    const result = await adapter.createSecret(defaultOptions);
+
+    expect(openshellCli.createProvider).toHaveBeenCalledWith({
+      name: 'my-secret',
+      type: 'github',
+      credentials: { value: 'ghp_abc123' },
+    });
+    expect(result).toEqual({ name: 'my-secret' });
+  });
+
+  test('rejects when openshellCli.createProvider fails', async () => {
+    vi.mocked(openshellCli.createProvider).mockRejectedValue(new Error('provider type not supported'));
+
+    await expect(adapter.createSecret(defaultOptions)).rejects.toThrow('provider type not supported');
+  });
+});
+
+describe('listSecrets', () => {
+  test('maps providers to SecretInfo array', async () => {
+    vi.mocked(openshellCli.listProviders).mockResolvedValue([
+      { name: 'my-openai', type: 'openai' },
+      { name: 'my-anthropic', type: 'anthropic' },
+    ]);
+
+    const result = await adapter.listSecrets();
+
+    expect(openshellCli.listProviders).toHaveBeenCalled();
+    expect(result).toEqual([
+      { name: 'my-openai', type: 'openai' },
+      { name: 'my-anthropic', type: 'anthropic' },
+    ]);
+  });
+
+  test('returns empty array when no providers exist', async () => {
+    vi.mocked(openshellCli.listProviders).mockResolvedValue([]);
+
+    const result = await adapter.listSecrets();
+
+    expect(result).toEqual([]);
+  });
+
+  test('rejects when openshellCli.listProviders fails', async () => {
+    vi.mocked(openshellCli.listProviders).mockRejectedValue(new Error('no gateway configured'));
+
+    await expect(adapter.listSecrets()).rejects.toThrow('no gateway configured');
+  });
+});
+
+describe('removeSecret', () => {
+  test('delegates to openshellCli.deleteProvider and returns the secret name', async () => {
+    vi.mocked(openshellCli.deleteProvider).mockResolvedValue(undefined);
+
+    const result = await adapter.removeSecret('my-openai');
+
+    expect(openshellCli.deleteProvider).toHaveBeenCalledWith('my-openai');
+    expect(result).toEqual({ name: 'my-openai' });
+  });
+
+  test('rejects when openshellCli.deleteProvider fails', async () => {
+    vi.mocked(openshellCli.deleteProvider).mockRejectedValue(new Error('provider not found: unknown'));
+
+    await expect(adapter.removeSecret('unknown')).rejects.toThrow('provider not found: unknown');
+  });
+});
+
+describe('listServices', () => {
+  test('returns empty array (not supported by OpenShell)', async () => {
+    const result = await adapter.listServices();
+
+    expect(result).toEqual([]);
+  });
+});

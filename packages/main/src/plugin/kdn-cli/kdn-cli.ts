@@ -33,7 +33,13 @@ import type {
   AgentWorkspaceSummary,
   CliInfo,
 } from '/@api/agent-workspace-info.js';
-import type { SecretCreateOptions, SecretInfo, SecretName, SecretService } from '/@api/secret-info.js';
+import type {
+  SecretCliBackend,
+  SecretCreateOptions,
+  SecretInfo,
+  SecretName,
+  SecretService,
+} from '/@api/secret-info.js';
 
 type WorkspaceConfiguration = workspaceComponents['schemas']['WorkspaceConfiguration'];
 
@@ -45,7 +51,7 @@ type WorkspaceConfiguration = workspaceComponents['schemas']['WorkspaceConfigura
  * orchestration (tasks, events, IPC) stays in the manager.
  */
 @injectable()
-export class KdnCli {
+export class KdnCli implements SecretCliBackend {
   constructor(
     @inject(Exec)
     private readonly exec: Exec,

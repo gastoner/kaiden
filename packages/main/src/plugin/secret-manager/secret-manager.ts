@@ -26,14 +26,27 @@ import { IPCHandle } from '/@/plugin/api.js';
 import { FilesystemMonitoring } from '/@/plugin/filesystem-monitoring.js';
 import { KdnCli } from '/@/plugin/kdn-cli/kdn-cli.js';
 import { ApiSenderType } from '/@api/api-sender/api-sender-type.js';
-import type { SecretCreateOptions, SecretInfo, SecretName, SecretService } from '/@api/secret-info.js';
+import type {
+  SecretCliBackend,
+  SecretCreateOptions,
+  SecretInfo,
+  SecretName,
+  SecretService,
+} from '/@api/secret-info.js';
+
+import { OpenshellSecretAdapter } from './openshell-secret-adapter.js';
 
 /**
- * Manages secrets by delegating to the `kdn` CLI.
+ * Manages secrets by delegating to a CLI backend.
+ *
+ * By default the `kdn` CLI is used. When the `KAIDEN_OPENSHELL`
+ * environment variable is set, the OpenShell provider commands
+ * are used instead (via {@link OpenshellSecretAdapter}).
  *
  * Watches `~/.kdn/secrets.json` so that external mutations
  * (e.g. `kdn secret remove` run from a terminal) are picked
- * up and forwarded to the renderer.
+ * up and forwarded to the renderer. File watching is skipped
+ * when the OpenShell backend is active.
  */
 @injectable()
 export class SecretManager implements Disposable {
@@ -46,28 +59,37 @@ export class SecretManager implements Disposable {
     private readonly ipcHandle: IPCHandle,
     @inject(KdnCli)
     private readonly kdnCli: KdnCli,
+    @inject(OpenshellSecretAdapter)
+    private readonly openshellAdapter: OpenshellSecretAdapter,
     @inject(FilesystemMonitoring)
     private readonly filesystemMonitoring: FilesystemMonitoring,
   ) {}
 
+  private get cli(): SecretCliBackend {
+    if (process.env['KAIDEN_OPENSHELL']) {
+      return this.openshellAdapter;
+    }
+    return this.kdnCli;
+  }
+
   async create(options: SecretCreateOptions): Promise<SecretName> {
-    const result = await this.kdnCli.createSecret(options);
+    const result = await this.cli.createSecret(options);
     this.apiSender.send('secret-manager-update');
     return result;
   }
 
   async list(): Promise<SecretInfo[]> {
-    return this.kdnCli.listSecrets();
+    return this.cli.listSecrets();
   }
 
   async remove(name: string): Promise<SecretName> {
-    const result = await this.kdnCli.removeSecret(name);
+    const result = await this.cli.removeSecret(name);
     this.apiSender.send('secret-manager-update');
     return result;
   }
 
   async listServices(): Promise<SecretService[]> {
-    return this.kdnCli.listServices();
+    return this.cli.listServices();
   }
 
   init(): void {
@@ -90,7 +112,9 @@ export class SecretManager implements Disposable {
       return this.listServices();
     });
 
-    this.watchSecretsFile();
+    if (!process.env['KAIDEN_OPENSHELL']) {
+      this.watchSecretsFile();
+    }
   }
 
   private watchSecretsFile(): void {

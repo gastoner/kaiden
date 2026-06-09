@@ -17,19 +17,22 @@
  ***********************************************************************/
 
 import type { FileSystemWatcher } from '@openkaiden/api';
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import type { IPCHandle } from '/@/plugin/api.js';
 import type { CliToolRegistry } from '/@/plugin/cli-tool-registry.js';
 import type { FilesystemMonitoring } from '/@/plugin/filesystem-monitoring.js';
 import { KdnCli } from '/@/plugin/kdn-cli/kdn-cli.js';
+import { OpenshellCli } from '/@/plugin/openshell-cli/openshell-cli.js';
 import type { Exec } from '/@/plugin/util/exec.js';
 import type { ApiSenderType } from '/@api/api-sender/api-sender-type.js';
 import type { SecretCreateOptions, SecretInfo } from '/@api/secret-info.js';
 
+import { OpenshellSecretAdapter } from './openshell-secret-adapter.js';
 import { SecretManager } from './secret-manager.js';
 
 vi.mock(import('/@/plugin/kdn-cli/kdn-cli.js'));
+vi.mock(import('/@/plugin/openshell-cli/openshell-cli.js'));
 
 const TEST_SECRETS: SecretInfo[] = [
   { name: 'my-secret', type: 'github', description: 'GitHub token' },
@@ -53,6 +56,8 @@ const apiSender: ApiSenderType = {
 };
 const ipcHandle: IPCHandle = vi.fn();
 const kdnCli = new KdnCli({} as Exec, {} as CliToolRegistry);
+const openshellCli = new OpenshellCli({} as Exec, {} as CliToolRegistry);
+const openshellAdapter = new OpenshellSecretAdapter(openshellCli);
 
 const mockWatcher = {
   onDidChange: vi.fn(),
@@ -66,9 +71,14 @@ const filesystemMonitoring = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  delete process.env['KAIDEN_OPENSHELL'];
   vi.mocked(filesystemMonitoring.createFileSystemWatcher).mockReturnValue(mockWatcher);
-  manager = new SecretManager(apiSender, ipcHandle, kdnCli, filesystemMonitoring);
+  manager = new SecretManager(apiSender, ipcHandle, kdnCli, openshellAdapter, filesystemMonitoring);
   manager.init();
+});
+
+afterEach(() => {
+  delete process.env['KAIDEN_OPENSHELL'];
 });
 
 describe('init', () => {
@@ -189,5 +199,86 @@ describe('remove', () => {
     vi.mocked(kdnCli.removeSecret).mockRejectedValue(new Error('secret not found: unknown'));
 
     await expect(manager.remove('unknown')).rejects.toThrow('secret not found: unknown');
+  });
+});
+
+describe('KAIDEN_OPENSHELL backend switching', () => {
+  const defaultOptions: SecretCreateOptions = {
+    name: 'my-secret',
+    type: 'github',
+    value: 'ghp_abc123',
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    process.env['KAIDEN_OPENSHELL'] = '1';
+    vi.mocked(filesystemMonitoring.createFileSystemWatcher).mockReturnValue(mockWatcher);
+    manager = new SecretManager(apiSender, ipcHandle, kdnCli, openshellAdapter, filesystemMonitoring);
+    manager.init();
+  });
+
+  test('delegates create to openshellAdapter when KAIDEN_OPENSHELL is set', async () => {
+    vi.mocked(openshellCli.createProvider).mockResolvedValue(undefined);
+
+    const result = await manager.create(defaultOptions);
+
+    expect(openshellCli.createProvider).toHaveBeenCalledWith({
+      name: 'my-secret',
+      type: 'github',
+      credentials: { value: 'ghp_abc123' },
+    });
+    expect(kdnCli.createSecret).not.toHaveBeenCalled();
+    expect(result).toEqual({ name: 'my-secret' });
+  });
+
+  test('delegates list to openshellAdapter when KAIDEN_OPENSHELL is set', async () => {
+    vi.mocked(openshellCli.listProviders).mockResolvedValue([
+      { name: 'my-openai', type: 'openai' },
+      { name: 'my-anthropic', type: 'anthropic' },
+    ]);
+
+    const result = await manager.list();
+
+    expect(openshellCli.listProviders).toHaveBeenCalled();
+    expect(kdnCli.listSecrets).not.toHaveBeenCalled();
+    expect(result).toHaveLength(2);
+    expect(result.map(s => s.name)).toEqual(['my-openai', 'my-anthropic']);
+  });
+
+  test('delegates remove to openshellAdapter when KAIDEN_OPENSHELL is set', async () => {
+    vi.mocked(openshellCli.deleteProvider).mockResolvedValue(undefined);
+
+    const result = await manager.remove('my-openai');
+
+    expect(openshellCli.deleteProvider).toHaveBeenCalledWith('my-openai');
+    expect(kdnCli.removeSecret).not.toHaveBeenCalled();
+    expect(result).toEqual({ name: 'my-openai' });
+  });
+
+  test('listServices returns empty array when KAIDEN_OPENSHELL is set', async () => {
+    const result = await manager.listServices();
+
+    expect(kdnCli.listServices).not.toHaveBeenCalled();
+    expect(result).toEqual([]);
+  });
+
+  test('skips file watching when KAIDEN_OPENSHELL is set', () => {
+    expect(filesystemMonitoring.createFileSystemWatcher).not.toHaveBeenCalled();
+  });
+
+  test('still emits secret-manager-update on create', async () => {
+    vi.mocked(openshellCli.createProvider).mockResolvedValue(undefined);
+
+    await manager.create(defaultOptions);
+
+    expect(apiSender.send).toHaveBeenCalledWith('secret-manager-update');
+  });
+
+  test('still emits secret-manager-update on remove', async () => {
+    vi.mocked(openshellCli.deleteProvider).mockResolvedValue(undefined);
+
+    await manager.remove('my-openai');
+
+    expect(apiSender.send).toHaveBeenCalledWith('secret-manager-update');
   });
 });

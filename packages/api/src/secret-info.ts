@@ -36,3 +36,16 @@ export type SecretService = components['schemas']['SecretService'];
 export interface SecretCreateOptions extends SecretInfo {
   value: string;
 }
+
+/**
+ * Common interface for CLI backends that support secret management.
+ *
+ * Both `KdnCli` and `OpenshellSecretAdapter` implement this contract
+ * so that `SecretManager` can switch between them at runtime.
+ */
+export interface SecretCliBackend {
+  createSecret(options: SecretCreateOptions): Promise<SecretName>;
+  listSecrets(): Promise<SecretInfo[]>;
+  removeSecret(name: string): Promise<SecretName>;
+  listServices(): Promise<SecretService[]>;
+}
