@@ -24,6 +24,7 @@ import * as extensionApi from '@openkaiden/api';
 import { inject, injectable } from 'inversify';
 
 import { ExtensionContextSymbol } from '/@/inject/symbol';
+import { OpenshellImageBuilderInstaller } from '/@/openshell-image-builder-installer';
 import { OpenshellInstaller } from '/@/openshell-installer';
 
 interface BinaryDiscoveryResult {
@@ -47,7 +48,7 @@ export class OpenshellCliManager implements Disposable {
     const packageJsonPath = join(this.extensionContext.extensionUri.fsPath, 'package.json');
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
 
-    const cliResult = await this.discoverBinary('openshell', 'openshell.binary.path');
+    const cliResult = await this.discoverBinary('openshell', 'openshell.binary.path', 'openshell');
     const registration: BinaryDiscoveryResult = cliResult ?? {
       installationSource: 'extension',
     };
@@ -67,6 +68,33 @@ export class OpenshellCliManager implements Disposable {
     const installer = new OpenshellInstaller(cliTool, packageJson.openshellVersion, this.extensionContext.storagePath);
 
     this.extensionContext.subscriptions.push(cliTool.registerInstaller(installer));
+
+    const ibResult = await this.discoverBinary(
+      'openshell-image-builder',
+      'openshell.imageBuilder.binary.path',
+      'openshell-image-builder',
+    );
+    const ibRegistration: BinaryDiscoveryResult = ibResult ?? {
+      installationSource: 'extension',
+    };
+
+    if (!ibResult) {
+      console.warn('[openshell-image-builder] CLI not found, registering installer-only entry');
+    }
+
+    const ibCliTool = this.registerCliTool(
+      'openshell-image-builder',
+      'OpenShell Image Builder',
+      'CLI for building custom container images for OpenShell sandboxes',
+      ibRegistration,
+    );
+    const ibInstaller = new OpenshellImageBuilderInstaller(
+      ibCliTool,
+      packageJson.openshellImageBuilderVersion,
+      this.extensionContext.storagePath,
+    );
+
+    this.extensionContext.subscriptions.push(ibCliTool.registerInstaller(ibInstaller));
   }
 
   dispose(): void {}
@@ -91,7 +119,11 @@ export class OpenshellCliManager implements Disposable {
     return cliTool;
   }
 
-  private async discoverBinary(binaryBaseName: string, configKey: string): Promise<BinaryDiscoveryResult | undefined> {
+  private async discoverBinary(
+    binaryBaseName: string,
+    configKey: string,
+    resourceSubdir: string,
+  ): Promise<BinaryDiscoveryResult | undefined> {
     const binDir = join(this.extensionContext.storagePath, 'bin');
     const binaryName = extensionApi.env.isWindows ? `${binaryBaseName}.exe` : binaryBaseName;
     const localBinaryPath = join(binDir, binaryName);
@@ -119,6 +151,19 @@ export class OpenshellCliManager implements Disposable {
     if (systemResult) {
       console.log(`[${binaryBaseName}] binary found in system PATH`);
       return { path: systemResult.path, version: systemResult.version, installationSource: 'external' };
+    }
+
+    const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+    if (resourcesPath) {
+      const bundledBinaryPath = join(resourcesPath, resourceSubdir, binaryName);
+      if (existsSync(bundledBinaryPath)) {
+        const version = await this.getVersion(bundledBinaryPath);
+        if (version) {
+          console.log(`[${binaryBaseName}] binary found in bundled resources`);
+          return { path: bundledBinaryPath, version, installationSource: 'extension' };
+        }
+        console.warn(`[${binaryBaseName}] bundled binary at ${bundledBinaryPath} failed to report a version`);
+      }
     }
 
     return undefined;

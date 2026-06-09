@@ -194,6 +194,22 @@ const config = {
         to: 'openshell',
         filter: ['!.openshell-version'],
       });
+
+      // include pre-downloaded openshell-image-builder binary (same platform filter)
+      const ibAssetsDir = path.join(
+        'extensions',
+        'openshell',
+        'assets',
+        'image-builder',
+        `${context.electronPlatformName}-${openshellArch}`,
+      );
+      if (fs.existsSync(ibAssetsDir)) {
+        context.packager.config.extraResources.push({
+          from: ibAssetsDir,
+          to: 'openshell-image-builder',
+          filter: ['!.openshell-image-builder-version'],
+        });
+      }
     }
 
     // include product.json

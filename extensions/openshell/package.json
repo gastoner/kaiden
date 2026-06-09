@@ -4,6 +4,7 @@
   "description": "Registers the openshell CLI binary for managing sandboxed workspaces.",
   "version": "0.2.0-next",
   "openshellVersion": "0.0.57",
+  "openshellImageBuilderVersion": "0.9.0",
   "icon": "icon.png",
   "publisher": "kaiden",
   "license": "Apache-2.0",
@@ -22,14 +23,23 @@
           "scope": "DEFAULT",
           "default": "",
           "description": "Custom path to OpenShell binary (Default is blank)"
+        },
+        "openshell.imageBuilder.binary.path": {
+          "type": "string",
+          "format": "file",
+          "scope": "DEFAULT",
+          "default": "",
+          "description": "Custom path to openshell-image-builder binary (Default is blank)"
         }
       }
     }
   },
   "scripts": {
-    "build": "vite build && tsx ./scripts/download.ts --all",
+    "build": "vite build && tsx ./scripts/download.ts --all && tsx ./scripts/download-image-builder.ts --all",
     "download": "tsx ./scripts/download.ts",
     "download:all": "tsx ./scripts/download.ts --all",
+    "download:image-builder": "tsx ./scripts/download-image-builder.ts",
+    "download:image-builder:all": "tsx ./scripts/download-image-builder.ts --all",
     "test": "vitest run --coverage",
     "test:watch": "vitest watch --coverage",
     "watch": "vite build --watch"
