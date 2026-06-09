@@ -77,14 +77,16 @@ beforeEach(() => {
 describe('init', () => {
   test('skips auto-start when existing gateway is healthy and already active', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    const existingGateways: GatewayInfo[] = [{ name: 'remote-gw', endpoint: 'https://gw.example.com', active: true }];
+    const existingGateways: GatewayInfo[] = [
+      { name: 'local-gw', endpoint: 'https://127.0.0.1:8443', active: true, type: 'local' },
+    ];
     vi.mocked(openshellCli.listGateways).mockResolvedValue(existingGateways);
     vi.mocked(exec.exec).mockResolvedValue(mockExecResult(''));
 
     await gateway.init();
 
     expect(openshellCli.listGateways).toHaveBeenCalled();
-    expect(exec.exec).toHaveBeenCalledWith(CLI_BINARY, ['status', '--gateway-endpoint', 'https://gw.example.com']);
+    expect(exec.exec).toHaveBeenCalledWith(CLI_BINARY, ['status', '--gateway-endpoint', 'https://127.0.0.1:8443']);
     expect(spawn).not.toHaveBeenCalled();
     expect(openshellCli.selectGateway).not.toHaveBeenCalled();
   });
@@ -205,13 +207,33 @@ describe('init', () => {
 
   test('does not pass --gateway-insecure for https endpoints during health check', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    const gateways: GatewayInfo[] = [{ name: 'tls-gw', endpoint: 'https://gw.example.com:8443', active: true }];
+    const gateways: GatewayInfo[] = [
+      { name: 'tls-gw', endpoint: 'https://127.0.0.1:8443', active: true, type: 'local' },
+    ];
     vi.mocked(openshellCli.listGateways).mockResolvedValue(gateways);
     vi.mocked(exec.exec).mockResolvedValue(mockExecResult(''));
 
     await gateway.init();
 
-    expect(exec.exec).toHaveBeenCalledWith(CLI_BINARY, ['status', '--gateway-endpoint', 'https://gw.example.com:8443']);
+    expect(exec.exec).toHaveBeenCalledWith(CLI_BINARY, ['status', '--gateway-endpoint', 'https://127.0.0.1:8443']);
+  });
+
+  test('skips remote gateways during init and auto-starts local', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const gateways: GatewayInfo[] = [{ name: 'remote-gw', endpoint: 'https://gw.example.com', active: true }];
+    vi.mocked(openshellCli.listGateways).mockResolvedValue(gateways);
+    const proc = createMockChildProcess();
+    vi.mocked(spawn).mockReturnValue(proc);
+    vi.mocked(exec.exec).mockRejectedValueOnce(new Error('connection refused')).mockResolvedValue(mockExecResult(''));
+
+    await gateway.init();
+
+    expect(exec.exec).not.toHaveBeenCalledWith(
+      CLI_BINARY,
+      expect.arrayContaining(['--gateway-endpoint', 'https://gw.example.com']),
+    );
+    expect(spawn).toHaveBeenCalled();
   });
 });
 
@@ -338,6 +360,33 @@ describe('start', () => {
 
     expect(spawn).toHaveBeenCalled();
     expect(exec.exec).not.toHaveBeenCalledWith(CLI_BINARY, expect.arrayContaining(['gateway', 'add']));
+  });
+
+  test('stops the spawned process when waitForReady fails', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const proc = createMockChildProcess();
+    vi.mocked(spawn).mockReturnValue(proc);
+    vi.mocked(exec.exec).mockRejectedValue(new Error('connection refused'));
+
+    let caughtError: unknown;
+    const startPromise = gateway.start().catch((err: unknown) => {
+      caughtError = err;
+    });
+
+    for (let i = 0; i < 30; i++) {
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+
+    proc.emit('exit', 1, undefined);
+    await vi.advanceTimersByTimeAsync(5000);
+    await startPromise;
+
+    expect(caughtError).toBeInstanceOf(Error);
+    expect((caughtError as Error).message).toContain('Gateway did not become ready');
+    expect(proc.kill).toHaveBeenCalledWith('SIGTERM');
+    vi.useRealTimers();
   });
 });
 

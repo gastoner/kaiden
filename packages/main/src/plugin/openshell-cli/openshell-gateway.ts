@@ -59,8 +59,9 @@ export class OpenshellGateway implements Disposable {
   async init(): Promise<void> {
     try {
       const gateways = await this.openshellCli.listGateways();
-      if (gateways.length > 0) {
-        for (const gw of gateways) {
+      const localGateways = gateways.filter(gw => gw.type === 'local' || this.isLocalEndpoint(gw.endpoint));
+      if (localGateways.length > 0) {
+        for (const gw of localGateways) {
           if (await this.isEndpointHealthy(gw.endpoint)) {
             if (!gw.active) {
               await this.openshellCli.selectGateway(gw.name);
@@ -69,7 +70,7 @@ export class OpenshellGateway implements Disposable {
             return;
           }
         }
-        console.warn('[openshell-gateway] gateway(s) defined but none reachable');
+        console.warn('[openshell-gateway] local gateway(s) defined but none reachable');
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -102,6 +103,15 @@ export class OpenshellGateway implements Disposable {
     try {
       await this.exec.exec(cliPath, args);
       return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private isLocalEndpoint(endpoint: string): boolean {
+    try {
+      const url = new URL(endpoint);
+      return ['127.0.0.1', 'localhost', '::1'].includes(url.hostname);
     } catch {
       return false;
     }
@@ -167,7 +177,9 @@ export class OpenshellGateway implements Disposable {
     try {
       await this.waitForReady();
     } catch (err: unknown) {
-      this.#gatewayProcess = undefined;
+      await this.stop().catch((stopErr: unknown) => {
+        console.warn('[openshell-gateway] failed to stop after startup error:', stopErr);
+      });
       this.#port = previousPort;
       this.#bindAddress = previousBindAddress;
       throw err;
