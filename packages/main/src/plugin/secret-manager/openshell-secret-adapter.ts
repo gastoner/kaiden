@@ -55,8 +55,7 @@ export class OpenshellSecretAdapter implements SecretCliBackend {
   }
 
   async listSecrets(): Promise<SecretInfo[]> {
-    const providers = await this.openshellCli.listProviders();
-    return providers.map(p => ({ name: p.name, type: p.type }));
+    return await this.openshellCli.listProviders();
   }
 
   async removeSecret(name: string): Promise<SecretName> {
