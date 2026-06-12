@@ -21,7 +21,7 @@ import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { writable } from 'svelte/store';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { resetDraft, wizard } from '/@/stores/agent-workspace-create-draft.svelte';
 import * as agentsStore from '/@/stores/agents';
@@ -33,6 +33,7 @@ import * as providerStore from '/@/stores/providers';
 import * as ragStore from '/@/stores/rag-environments';
 import * as secretVaultStore from '/@/stores/secret-vault';
 import * as skillsStore from '/@/stores/skills';
+import * as workspaceProjectsStore from '/@/stores/workspace-projects';
 import type { AgentInfo } from '/@api/agent-info';
 import type { MCPRemoteServerInfo } from '/@api/mcp/mcp-server-info';
 import type { CatalogModelInfo } from '/@api/model-registry-info';
@@ -40,6 +41,7 @@ import type { ProviderInfo } from '/@api/provider-info';
 import type { RagEnvironment } from '/@api/rag/rag-environment';
 import type { SecretVaultInfo } from '/@api/secret-vault/secret-vault-info';
 import type { SkillInfo } from '/@api/skill/skill-info';
+import type { WorkspaceProjectInfo } from '/@api/workspace-project-info';
 
 import AgentWorkspaceCreate from './AgentWorkspaceCreate.svelte';
 
@@ -53,6 +55,7 @@ vi.mock(import('/@/stores/providers'));
 vi.mock(import('/@/stores/rag-environments'));
 vi.mock(import('/@/stores/model-catalog'));
 vi.mock(import('/@/stores/models'));
+vi.mock(import('/@/stores/workspace-projects'));
 
 function buildCatalogModels(providers: ProviderInfo[]): CatalogModelInfo[] {
   const result: CatalogModelInfo[] = [];
@@ -134,6 +137,7 @@ beforeEach(() => {
   vi.mocked(modelCatalogStore.modelSelectionKey).mockImplementation(
     (providerId: string, connectionId: string, label: string): string => `${providerId}::${connectionId}::${label}`,
   );
+  vi.mocked(workspaceProjectsStore).workspaceProjectInfos = writable<readonly WorkspaceProjectInfo[]>([]);
   vi.mocked(window.checkAgentWorkspaceConfigExists).mockResolvedValue(false);
   vi.mocked(window.showMessageBox).mockResolvedValue({ response: 0 });
   resetDraft();
@@ -1671,3 +1675,356 @@ test('Expect navigation still called when startWorkspace fails', async () => {
 });
 
 const wizardStepCount = 5;
+
+const sampleProject: WorkspaceProjectInfo = {
+  id: 'my-app',
+  name: 'My App',
+  description: 'A sample project',
+  folder: '/home/user/my-app',
+  skills: ['kubernetes'],
+  mcpServers: ['mcp-github'],
+  knowledges: [],
+  secrets: ['github-token'],
+  filesystem: { mode: 'project', mounts: [] },
+  network: { mode: 'deny', hosts: ['registry.npmjs.org'] },
+};
+
+function setProjects(projects: WorkspaceProjectInfo[]): void {
+  vi.mocked(workspaceProjectsStore).workspaceProjectInfos = writable<readonly WorkspaceProjectInfo[]>(projects);
+}
+
+describe('when projects exist', () => {
+  beforeEach(() => {
+    setProjects([sampleProject]);
+  });
+
+  test('Expect wizard still has five steps when projects exist', () => {
+    render(AgentWorkspaceCreate);
+
+    expect(screen.getByText(/Step 1 of 5/)).toBeInTheDocument();
+  });
+
+  test('Expect Saved project accordion visible on workspace step', () => {
+    render(AgentWorkspaceCreate);
+
+    expect(screen.getByRole('button', { name: /Saved project/ })).toBeInTheDocument();
+  });
+
+  test('Expect project selection cards rendered after expanding accordion', async () => {
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+
+    expect(screen.getByRole('option', { name: /None/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /My App/ })).toBeInTheDocument();
+  });
+
+  test('Expect selecting a project pre-fills source path', async () => {
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect((screen.getByPlaceholderText('/path/to/project') as HTMLInputElement).value).toBe('/home/user/my-app');
+  });
+
+  test('Expect selecting a project pre-fills session name', async () => {
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect((screen.getByPlaceholderText('e.g., Frontend Refactoring') as HTMLInputElement).value).toBe('My App');
+  });
+
+  test('Expect createAgentWorkspace called with project id', async () => {
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Use all defaults and create workspace' }));
+
+    expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project: 'my-app',
+        sourcePath: '/home/user/my-app',
+      }),
+    );
+  });
+
+  test('Expect createAgentWorkspace called without project when None selected', async () => {
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /None/ }));
+
+    await fireEvent.input(screen.getByPlaceholderText('/path/to/project'), {
+      target: { value: '/home/user/other-repo' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Use all defaults and create workspace' }));
+
+    expect(window.createAgentWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project: undefined,
+      }),
+    );
+  });
+
+  test('Expect selecting a project populates draft skill ids', async () => {
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect(wizard.draft.selectedSkillIds).toEqual(['kubernetes']);
+  });
+
+  test('Expect selecting a project populates draft MCP ids', async () => {
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect(wizard.draft.selectedMcpIds).toEqual(['mcp-github']);
+  });
+
+  test('Expect selecting a project populates draft secret ids', async () => {
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect(wizard.draft.selectedSecretIds).toEqual(['github-token']);
+  });
+
+  test('Expect selecting a project maps deny network with custom hosts to blocked mode', async () => {
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect(wizard.draft.selectedNetwork).toBe('blocked');
+    expect(wizard.draft.hostsByMode['blocked']).toEqual(['registry.npmjs.org']);
+  });
+
+  test('Expect clearing project resets draft fields', async () => {
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+    expect(wizard.draft.selectedProjectId).toBe('my-app');
+
+    await fireEvent.click(screen.getByRole('option', { name: /None/ }));
+
+    expect(wizard.draft.selectedProjectId).toBeUndefined();
+    expect(wizard.draft.sourcePath).toBe('');
+    expect(wizard.draft.sessionName).toBe('');
+  });
+
+  test('Expect clearing project restores all-selected defaults for resources', async () => {
+    vi.mocked(skillsStore).skillInfos = writable<SkillInfo[]>([
+      { name: 'kubernetes', description: 'K8s', path: '/skills/k8s', enabled: true, managed: false },
+      { name: 'docker', description: 'Docker', path: '/skills/docker', enabled: true, managed: false },
+    ]);
+    vi.mocked(mcpStore).mcpRemoteServerInfos = writable<MCPRemoteServerInfo[]>([
+      { id: 'mcp-1', name: 'MCP One', description: '', url: '', infos: {}, tools: {} } as MCPRemoteServerInfo,
+    ]);
+
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+    expect(wizard.draft.selectedSkillIds).toEqual(['kubernetes']);
+    expect(wizard.draft.selectedMcpIds).toEqual(['mcp-github']);
+
+    await fireEvent.click(screen.getByRole('option', { name: /None/ }));
+
+    expect(wizard.draft.selectedSkillIds).toEqual(['kubernetes', 'docker']);
+    expect(wizard.draft.selectedMcpIds).toEqual(['mcp-1']);
+  });
+});
+
+describe('project filesystem mapping', () => {
+  test('Expect allow network mapped to open mode', async () => {
+    const openNetProject: WorkspaceProjectInfo = {
+      ...sampleProject,
+      id: 'open-net',
+      network: { mode: 'allow' },
+    };
+    setProjects([openNetProject]);
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect(wizard.draft.selectedNetwork).toBe('open');
+  });
+
+  test('Expect allow network falls back to registries when runtime is openshell', async () => {
+    vi.mocked(agentWorkspaceRuntimeStore).agentWorkspaceRuntime = writable<string>('openshell');
+    const openNetProject: WorkspaceProjectInfo = {
+      ...sampleProject,
+      id: 'open-net',
+      network: { mode: 'allow' },
+    };
+    setProjects([openNetProject]);
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect(wizard.draft.selectedNetwork).toBe('registries');
+  });
+
+  test('Expect deny network without hosts mapped to blocked mode', async () => {
+    const blockedProject: WorkspaceProjectInfo = {
+      ...sampleProject,
+      id: 'blocked',
+      network: { mode: 'deny' },
+    };
+    setProjects([blockedProject]);
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect(wizard.draft.selectedNetwork).toBe('blocked');
+  });
+
+  test('Expect deny network with registry preset hosts mapped to registries mode', async () => {
+    const registryProject: WorkspaceProjectInfo = {
+      ...sampleProject,
+      id: 'registry-preset',
+      network: { mode: 'deny', hosts: ['registry.npmjs.org', 'pypi.python.org'] },
+    };
+    setProjects([registryProject]);
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect(wizard.draft.selectedNetwork).toBe('registries');
+    expect(wizard.draft.hostsByMode['registries']).toEqual(['registry.npmjs.org', 'pypi.python.org']);
+  });
+
+  test('Expect deny network with custom hosts mapped to blocked mode', async () => {
+    const customHostsProject: WorkspaceProjectInfo = {
+      ...sampleProject,
+      id: 'custom-hosts',
+      network: { mode: 'deny', hosts: ['internal.corp.local'] },
+    };
+    setProjects([customHostsProject]);
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect(wizard.draft.selectedNetwork).toBe('blocked');
+    expect(wizard.draft.hostsByMode['blocked']).toEqual(['internal.corp.local']);
+  });
+
+  test('Expect Deny All radio checked on networking step after selecting project with custom hosts', async () => {
+    const customHostsProject: WorkspaceProjectInfo = {
+      ...sampleProject,
+      id: 'custom-hosts',
+      network: { mode: 'deny', hosts: ['internal.corp.local'] },
+    };
+    setProjects([customHostsProject]);
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    for (let i = 0; i < 4; i++) {
+      await fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    }
+
+    expect(screen.getByRole('radio', { name: 'Use Deny All' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Use Developer Preset' })).not.toBeChecked();
+  });
+
+  test('Expect Developer Preset radio checked on networking step after selecting project with registry preset', async () => {
+    const registryProject: WorkspaceProjectInfo = {
+      ...sampleProject,
+      id: 'registry-preset',
+      network: { mode: 'deny', hosts: ['registry.npmjs.org', 'pypi.python.org'] },
+    };
+    setProjects([registryProject]);
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    for (let i = 0; i < 4; i++) {
+      await fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    }
+
+    expect(screen.getByRole('radio', { name: 'Use Developer Preset' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Use Deny All' })).not.toBeChecked();
+  });
+
+  test('Expect home mount mapped to home file access', async () => {
+    const homeProject: WorkspaceProjectInfo = {
+      ...sampleProject,
+      id: 'home-mount',
+      filesystem: { mode: 'custom', mounts: [{ host: '$HOME', target: '$HOME', ro: false }] },
+    };
+    setProjects([homeProject]);
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect(wizard.draft.selectedFileAccess).toBe('home');
+  });
+
+  test('Expect root mount mapped to full file access', async () => {
+    const rootProject: WorkspaceProjectInfo = {
+      ...sampleProject,
+      id: 'root-mount',
+      filesystem: { mode: 'custom', mounts: [{ host: '/', target: '/', ro: false }] },
+    };
+    setProjects([rootProject]);
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect(wizard.draft.selectedFileAccess).toBe('full');
+  });
+
+  test('Expect custom mounts mapped to custom file access', async () => {
+    const customProject: WorkspaceProjectInfo = {
+      ...sampleProject,
+      id: 'custom-mounts',
+      filesystem: {
+        mode: 'custom',
+        mounts: [{ host: '/data', target: '/workspace/data', ro: true }],
+      },
+    };
+    setProjects([customProject]);
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect(wizard.draft.selectedFileAccess).toBe('custom');
+    expect(wizard.draft.customMounts).toEqual([{ host: '/data', target: '/workspace/data', ro: true }]);
+  });
+
+  test('Expect empty mounts mapped to workspace file access', async () => {
+    const noMountProject: WorkspaceProjectInfo = {
+      ...sampleProject,
+      id: 'no-mounts',
+      filesystem: { mode: 'project', mounts: [] },
+    };
+    setProjects([noMountProject]);
+    render(AgentWorkspaceCreate);
+
+    await fireEvent.click(screen.getByRole('button', { name: /Saved project/ }));
+    await fireEvent.click(screen.getByRole('option', { name: /My App/ }));
+
+    expect(wizard.draft.selectedFileAccess).toBe('workspace');
+  });
+});

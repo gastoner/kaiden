@@ -29,6 +29,7 @@ const REGISTRY_HOSTS = ['registry.npmjs.org', 'pypi.python.org'];
 
 interface WorkspaceCreateDraft {
   currentStepIndex: number;
+  selectedProjectId: string | undefined;
   sourcePath: string;
   sessionName: string;
   description: string;
@@ -42,6 +43,7 @@ interface WorkspaceCreateDraft {
   hostsByMode: Record<string, string[]>;
   nameManuallyEdited: boolean;
   descriptionOpen: boolean;
+  projectOpen: boolean;
   selectedSkillIds: string[];
   selectedMcpIds: string[];
   selectedSecretIds: string[];
@@ -52,6 +54,7 @@ interface WorkspaceCreateDraft {
 function createInitialDraft(): WorkspaceCreateDraft {
   return {
     currentStepIndex: 0,
+    selectedProjectId: undefined,
     sourcePath: '',
     sessionName: '',
     description: '',
@@ -68,6 +71,7 @@ function createInitialDraft(): WorkspaceCreateDraft {
     },
     nameManuallyEdited: false,
     descriptionOpen: false,
+    projectOpen: false,
     selectedSkillIds: [],
     selectedMcpIds: [],
     selectedSecretIds: [],

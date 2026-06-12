@@ -29,6 +29,7 @@ const defaultProps = {
   description: '',
   nameManuallyEdited: false,
   descriptionOpen: false,
+  projectOpen: false,
   onBrowseSource: vi.fn(),
 };
 

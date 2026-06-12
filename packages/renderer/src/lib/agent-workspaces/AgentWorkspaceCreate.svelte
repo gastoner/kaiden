@@ -19,7 +19,9 @@ import { disabledModels, isModelEnabled, modelKey } from '/@/stores/model-catalo
 import { catalogModels } from '/@/stores/models';
 import { providerInfos } from '/@/stores/providers';
 import { ragEnvironments } from '/@/stores/rag-environments';
+import { secretVaultInfos } from '/@/stores/secret-vault';
 import { skillInfos } from '/@/stores/skills';
+import { workspaceProjectInfos } from '/@/stores/workspace-projects';
 import type {
   AgentWorkspaceConfiguration,
   AgentWorkspaceMount,
@@ -27,6 +29,7 @@ import type {
 } from '/@api/agent-workspace-info';
 import { NavigationPage } from '/@api/navigation-page';
 import type { DefaultWorkspaceSettings } from '/@api/onboarding-settings-info';
+import type { FilesystemConfiguration, WorkspaceProjectInfo } from '/@api/workspace-project-info';
 
 import AgentWorkspaceCreateStepAgentModel from './AgentWorkspaceCreateStepAgentModel.svelte';
 import type { CustomMount } from './AgentWorkspaceCreateStepFileSystem.svelte';
@@ -55,6 +58,86 @@ const wizardSteps = [
   { id: 'filesystem', title: 'File System' },
   { id: 'networking', title: 'Networking' },
 ];
+
+function applyFilesystemFromProject(fs: FilesystemConfiguration): void {
+  const hasMounts = fs.mounts.length > 0;
+  if (!hasMounts) {
+    wizard.draft.selectedFileAccess = 'workspace';
+    wizard.draft.customMounts = [{ host: '', target: '', ro: false }];
+    return;
+  }
+  const hasHome = fs.mounts.some(m => m.host === '$HOME' && m.target === '$HOME');
+  const hasRoot = fs.mounts.some(m => m.host === '/' && m.target === '/');
+  if (hasRoot) {
+    wizard.draft.selectedFileAccess = 'full';
+  } else if (hasHome && fs.mounts.length === 1) {
+    wizard.draft.selectedFileAccess = 'home';
+  } else {
+    wizard.draft.selectedFileAccess = 'custom';
+    wizard.draft.customMounts = fs.mounts.map(m => ({ host: m.host, target: m.target, ro: m.ro ?? false }));
+  }
+}
+
+const REGISTRY_PRESET = ['registry.npmjs.org', 'pypi.python.org'];
+
+function isRegistryPreset(hosts: string[]): boolean {
+  return hosts.length === REGISTRY_PRESET.length && hosts.every((h, i) => h === REGISTRY_PRESET[i]);
+}
+
+function applyNetworkFromProject(net: NetworkConfiguration | undefined): void {
+  if (!net) return;
+  if (net.mode === 'allow') {
+    wizard.draft.selectedNetwork = $agentWorkspaceRuntime === 'openshell' ? 'registries' : 'open';
+    return;
+  }
+  const hosts = net.hosts ?? [];
+  if (hosts.length > 0 && isRegistryPreset(hosts)) {
+    wizard.draft.selectedNetwork = 'registries';
+    wizard.draft.hostsByMode = { ...wizard.draft.hostsByMode, registries: [...hosts] };
+  } else if (hosts.length > 0) {
+    wizard.draft.selectedNetwork = 'blocked';
+    wizard.draft.hostsByMode = { ...wizard.draft.hostsByMode, blocked: [...hosts] };
+  } else {
+    wizard.draft.selectedNetwork = 'blocked';
+    wizard.draft.hostsByMode = { ...wizard.draft.hostsByMode, blocked: [''] };
+  }
+}
+
+function applyProject(project: WorkspaceProjectInfo): void {
+  wizard.draft.selectedProjectId = project.id;
+  wizard.draft.sourcePath = project.folder;
+  wizard.draft.sessionName = project.name;
+  wizard.draft.nameManuallyEdited = true;
+  wizard.draft.selectedSkillIds = [...project.skills];
+  wizard.draft.selectedMcpIds = [...project.mcpServers];
+  wizard.draft.selectedSecretIds = [...project.secrets];
+  wizard.draft.selectedKnowledgeIds = [...project.knowledges];
+  applyFilesystemFromProject(project.filesystem);
+  applyNetworkFromProject(project.network);
+}
+
+function clearProject(): void {
+  wizard.draft.selectedProjectId = undefined;
+  wizard.draft.sourcePath = '';
+  wizard.draft.sessionName = '';
+  wizard.draft.nameManuallyEdited = false;
+  wizard.draft.selectedSkillIds = $skillInfos.filter(s => s.enabled).map(s => s.name);
+  wizard.draft.selectedMcpIds = $mcpRemoteServerInfos.map(m => m.id);
+  wizard.draft.selectedSecretIds = $secretVaultInfos.map(s => s.id);
+  wizard.draft.selectedKnowledgeIds = $ragEnvironments.filter(r => r.mcpServer).map(r => r.name);
+  wizard.draft.selectedFileAccess = 'workspace';
+  wizard.draft.selectedNetwork = 'registries';
+  wizard.draft.customMounts = [{ host: '', target: '', ro: false }];
+  wizard.draft.hostsByMode = { registries: ['registry.npmjs.org', 'pypi.python.org'], blocked: [''] };
+}
+
+function handleProjectSelect(project: WorkspaceProjectInfo | undefined): void {
+  if (project) {
+    applyProject(project);
+  } else {
+    clearProject();
+  }
+}
 
 let skillItems: ChecklistItem[] = $derived(
   $skillInfos
@@ -319,6 +402,7 @@ async function startAsIs(): Promise<void> {
       runtime: $agentWorkspaceRuntime,
       agent: draftSnapshot.selectedAgent,
       name: draftSnapshot.sessionName || getDefaultSessionName(draftSnapshot.sourcePath),
+      project: draftSnapshot.selectedProjectId,
     });
     resetDraft();
   } catch (err: unknown) {
@@ -383,6 +467,7 @@ async function startWorkspace(): Promise<void> {
         : undefined,
       workspaceConfiguration: getAgentWorkspaceConfiguration(draftSnapshot.selectedAgent),
       replaceConfig: draftSnapshot.configExists && draftSnapshot.configAction === 'replace' ? true : undefined,
+      project: draftSnapshot.selectedProjectId,
     });
     resetDraft();
   } catch (err: unknown) {
@@ -430,10 +515,14 @@ async function startWorkspace(): Promise<void> {
                 bind:description={wizard.draft.description}
                 bind:nameManuallyEdited={wizard.draft.nameManuallyEdited}
                 bind:descriptionOpen={wizard.draft.descriptionOpen}
+                bind:projectOpen={wizard.draft.projectOpen}
                 onBrowseSource={handleBrowseSource}
                 configExists={wizard.draft.configExists}
                 bind:configAction={wizard.draft.configAction}
-                onStartAsIs={startAsIs} />
+                onStartAsIs={startAsIs}
+                projects={[...$workspaceProjectInfos]}
+                selectedProjectId={wizard.draft.selectedProjectId}
+                onProjectSelect={handleProjectSelect} />
             {:else if currentStepId === 'agent-model'}
               <AgentWorkspaceCreateStepAgentModel bind:selectedAgent={wizard.draft.selectedAgent} bind:selectedModel={wizard.draft.selectedModel} />
             {:else if currentStepId === 'tools-secrets'}

@@ -1,9 +1,10 @@
 <script lang="ts">
-import { faChevronDown, faFolderOpen, faInfoCircle } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faFolder, faFolderOpen, faInfoCircle, faRocket } from '@fortawesome/free-solid-svg-icons';
 import { Button, Input } from '@podman-desktop/ui-svelte';
 import { Icon } from '@podman-desktop/ui-svelte/icons';
 
 import { Textarea } from '/@/lib/chat/components/ui/textarea';
+import type { WorkspaceProjectInfo } from '/@api/workspace-project-info';
 
 interface Props {
   sourcePath: string;
@@ -11,10 +12,14 @@ interface Props {
   description: string;
   nameManuallyEdited: boolean;
   descriptionOpen: boolean;
+  projectOpen: boolean;
   onBrowseSource: () => Promise<void>;
   configExists?: boolean;
   configAction?: 'merge' | 'replace';
   onStartAsIs?: () => Promise<void>;
+  projects?: WorkspaceProjectInfo[];
+  selectedProjectId?: string;
+  onProjectSelect?: (project: WorkspaceProjectInfo | undefined) => void;
 }
 
 let {
@@ -23,10 +28,14 @@ let {
   description = $bindable(),
   nameManuallyEdited = $bindable(),
   descriptionOpen = $bindable(),
+  projectOpen = $bindable(),
   onBrowseSource,
   configExists = false,
   configAction = $bindable('merge'),
   onStartAsIs,
+  projects = [],
+  selectedProjectId,
+  onProjectSelect,
 }: Props = $props();
 
 function markNameEdited(): void {
@@ -35,6 +44,10 @@ function markNameEdited(): void {
 
 function toggleDescription(): void {
   descriptionOpen = !descriptionOpen;
+}
+
+function toggleProject(): void {
+  projectOpen = !projectOpen;
 }
 </script>
 
@@ -147,4 +160,79 @@ function toggleDescription(): void {
       </div>
     {/if}
   </div>
+
+  {#if projects.length > 0}
+    <div class="rounded-xl border border-[var(--pd-content-card-border)]/85 bg-[var(--pd-content-card-bg)]/35 overflow-hidden">
+      <button
+        class="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-[var(--pd-modal-text)] hover:bg-[var(--pd-content-card-inset-bg)]/50 transition-colors cursor-pointer"
+        onclick={toggleProject}>
+        <span>
+          Saved project <span class="text-xs font-normal opacity-50">(optional)</span>
+        </span>
+        <span
+          class="transition-transform duration-150 {projectOpen ? 'rotate-180' : ''}"
+          aria-hidden="true">
+          <Icon icon={faChevronDown} size="xs" />
+        </span>
+      </button>
+      {#if projectOpen}
+        <div class="px-4 pb-4 space-y-3">
+          <p class="text-xs text-[var(--pd-content-card-text)] opacity-60">
+            Load defaults from a project — path, skills, MCP, secrets, and access presets.
+          </p>
+          <div role="listbox" aria-label="Project selection" class="space-y-2">
+            <button
+              type="button"
+              role="option"
+              aria-selected={selectedProjectId === undefined}
+              class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer text-left text-sm transition-colors
+                {selectedProjectId === undefined
+                  ? 'border-[var(--pd-content-card-border-selected)] bg-[var(--pd-content-card-hover-inset-bg)] text-[var(--pd-modal-text)]'
+                  : 'border-[var(--pd-content-card-border)] bg-transparent text-[var(--pd-content-card-text)] hover:bg-[var(--pd-content-card-hover-inset-bg)]'}"
+              onclick={(): void => onProjectSelect?.(undefined)}>
+              <span class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0
+                {selectedProjectId === undefined ? 'border-[var(--pd-link)]' : 'border-[var(--pd-content-card-border)]'}">
+                {#if selectedProjectId === undefined}
+                  <span class="w-2 h-2 rounded-full bg-[var(--pd-link)]"></span>
+                {/if}
+              </span>
+              <span>None — keep what I entered above</span>
+            </button>
+
+            <div class="grid grid-cols-2 gap-2">
+              {#each projects as project (project.id)}
+                {@const isSelected = selectedProjectId === project.id}
+                {@const resourceCount = project.skills.length + project.mcpServers.length + project.secrets.length + project.knowledges.length}
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  class="flex flex-col gap-2 p-3 rounded-lg border cursor-pointer text-left transition-colors
+                    {isSelected
+                      ? 'border-[var(--pd-content-card-border-selected)] bg-[var(--pd-content-card-hover-inset-bg)]'
+                      : 'border-[var(--pd-content-card-border)] bg-transparent hover:bg-[var(--pd-content-card-hover-inset-bg)]'}"
+                  onclick={(): void => onProjectSelect?.(project)}>
+                  <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center bg-[var(--pd-link)]/15 text-[var(--pd-link)] shrink-0">
+                      <Icon icon={faRocket} size="sm" />
+                    </div>
+                    <span class="font-semibold text-sm text-[var(--pd-modal-text)] truncate">{project.name}</span>
+                  </div>
+                  <div class="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-[var(--pd-content-card-text)] opacity-60">
+                    <span class="flex items-center gap-1">
+                      <Icon icon={faFolder} size="xs" />
+                      <span class="font-mono truncate max-w-[160px]">{project.folder}</span>
+                    </span>
+                    {#if resourceCount > 0}
+                      <span>{resourceCount} resource{resourceCount !== 1 ? 's' : ''}</span>
+                    {/if}
+                  </div>
+                </button>
+              {/each}
+            </div>
+          </div>
+        </div>
+      {/if}
+    </div>
+  {/if}
 </div>
