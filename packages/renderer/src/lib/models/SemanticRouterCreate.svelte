@@ -6,42 +6,67 @@ import { Icon } from '@podman-desktop/ui-svelte/icons';
 import FormPage from '/@/lib/ui/FormPage.svelte';
 import WizardStepper from '/@/lib/ui/WizardStepper.svelte';
 import { handleNavigation } from '/@/navigation';
+import { resetRouterDraft, routerWizard } from '/@/stores/semantic-router-create-draft.svelte';
 import { NavigationPage } from '/@api/navigation-page';
+import type { SemanticRouterConfigInfo } from '/@api/semantic-router-info';
 
-const WIZARD_STEPS = [{ id: 'basic', title: 'Basic setup' }];
+import SemanticRouterCreateStepSignals from './SemanticRouterCreateStepSignals.svelte';
 
-let currentStepIndex = $state(0);
+const WIZARD_STEPS = [
+  { id: 'basic', title: 'Basic setup' },
+  { id: 'signals', title: 'Signals & decisions' },
+];
+
+let currentStepIndex = $derived(routerWizard.draft.currentStepIndex);
 let currentStepId = $derived(WIZARD_STEPS[currentStepIndex]?.id ?? '');
 let isLastStep = $derived(currentStepIndex === WIZARD_STEPS.length - 1);
-
-let name = $state('');
-let description = $state('');
-let listenerAddress = $state('0.0.0.0');
-let listenerPort = $state(8899);
-let timeout = $state(300);
 
 let error = $state('');
 let creating = $state(false);
 
-let canSave = $derived(
-  name.trim().length > 0 && listenerPort >= 1024 && listenerPort <= 65535 && timeout > 0 && timeout <= 3600,
+let isBasicStepValid = $derived(
+  routerWizard.draft.name.trim().length > 0 &&
+    routerWizard.draft.listenerPort >= 1024 &&
+    routerWizard.draft.listenerPort <= 65535 &&
+    routerWizard.draft.timeout > 0 &&
+    routerWizard.draft.timeout <= 3600,
 );
 
-async function goNext(): Promise<void> {
-  if (!isLastStep) {
-    currentStepIndex++;
-    return;
-  }
+let canProceed = $derived.by(() => {
+  if (currentStepId === 'basic') return isBasicStepValid;
+  return true;
+});
 
+function goBack(): void {
+  if (routerWizard.draft.currentStepIndex > 0) {
+    routerWizard.draft.currentStepIndex--;
+  }
+}
+
+function handleStepClick(index: number): void {
+  routerWizard.draft.currentStepIndex = index;
+}
+
+function buildConfig(): SemanticRouterConfigInfo {
+  const d = $state.snapshot(routerWizard.draft);
+  return {
+    name: d.name.trim(),
+    description: d.description.trim() || undefined,
+    listeners: [{ address: d.listenerAddress, port: d.listenerPort, timeout: d.timeout }],
+    routing: {
+      keywords: d.keywords,
+      decisions: d.decisions,
+    },
+  };
+}
+
+async function createRouter(): Promise<void> {
+  if (creating) return;
   error = '';
   creating = true;
   try {
-    await window.createSemanticRouter({
-      name: name.trim(),
-      description: description.trim() || undefined,
-      listeners: [{ address: listenerAddress, port: listenerPort, timeout }],
-      routing: { keywords: [], decisions: [] },
-    });
+    await window.createSemanticRouter(buildConfig());
+    resetRouterDraft();
     handleNavigation({ page: NavigationPage.SEMANTIC_ROUTERS });
   } catch (err: unknown) {
     error = String(err);
@@ -50,7 +75,16 @@ async function goNext(): Promise<void> {
   }
 }
 
+async function goNext(): Promise<void> {
+  if (!isLastStep) {
+    routerWizard.draft.currentStepIndex++;
+    return;
+  }
+  await createRouter();
+}
+
 function cancel(): void {
+  resetRouterDraft();
   handleNavigation({ page: NavigationPage.SEMANTIC_ROUTERS });
 }
 </script>
@@ -78,7 +112,7 @@ function cancel(): void {
           </div>
 
           <!-- Stepper -->
-          <WizardStepper steps={WIZARD_STEPS} currentIndex={currentStepIndex} />
+          <WizardStepper steps={WIZARD_STEPS} currentIndex={currentStepIndex} onStepClick={handleStepClick} />
 
           <!-- Step content card -->
           <div class="rounded-xl border border-(--pd-content-card-border) bg-(--pd-content-card-inset-bg) p-6">
@@ -90,13 +124,12 @@ function cancel(): void {
             </p>
 
             <div class="space-y-4">
-              <!-- Name + Description row -->
               <div class="grid grid-cols-2 gap-3.5">
                 <div>
                   <label for="router-name" class="block text-sm font-semibold text-(--pd-modal-text) mb-2">
                     Router name <span class="text-(--pd-input-field-error-text)">*</span>
                   </label>
-                  <Input id="router-name" bind:value={name} placeholder="e.g. coding-router" aria-label="Router name" />
+                  <Input id="router-name" bind:value={routerWizard.draft.name} placeholder="e.g. coding-router" aria-label="Router name" />
                   <p class="text-xs text-(--pd-content-card-text) opacity-50 mt-1.5">
                     Used as the identifier when selecting this router in workspace creation.
                   </p>
@@ -105,17 +138,16 @@ function cancel(): void {
                   <label for="router-description" class="block text-sm font-semibold text-(--pd-modal-text) mb-2">
                     Description
                   </label>
-                  <Input id="router-description" bind:value={description} placeholder="Short description of the routing strategy" aria-label="Description" />
+                  <Input id="router-description" bind:value={routerWizard.draft.description} placeholder="Short description of the routing strategy" aria-label="Description" />
                 </div>
               </div>
 
-              <!-- Address + Port row -->
               <div class="grid grid-cols-2 gap-3.5">
                 <div>
                   <label for="listener-address" class="block text-sm font-semibold text-(--pd-modal-text) mb-2">
                     Listener address
                   </label>
-                  <Input id="listener-address" bind:value={listenerAddress} placeholder="0.0.0.0" aria-label="Listener address" />
+                  <Input id="listener-address" bind:value={routerWizard.draft.listenerAddress} placeholder="0.0.0.0" aria-label="Listener address" />
                   <p class="text-xs text-(--pd-content-card-text) opacity-50 mt-1.5">
                     Use <code class="text-(--pd-button-primary-bg)">host.containers.internal</code> when running
                     inside a container to reach host services.
@@ -125,25 +157,28 @@ function cancel(): void {
                   <span class="block text-sm font-semibold text-(--pd-modal-text) mb-2">
                     Listener port
                   </span>
-                  <NumberInput bind:value={listenerPort} minimum={1024} maximum={65535} type="integer" aria-label="Listener port" />
+                  <NumberInput bind:value={routerWizard.draft.listenerPort} minimum={1024} maximum={65535} type="integer" aria-label="Listener port" />
                   <p class="text-xs text-(--pd-content-card-text) opacity-50 mt-1.5">
                     Default: <strong>8899</strong>. Agents connect to
-                    <code class="text-(--pd-button-primary-bg)">http://host:{listenerPort}/v1/chat/completions</code>.
+                    <code class="text-(--pd-button-primary-bg)">http://host:{routerWizard.draft.listenerPort}/v1/chat/completions</code>.
                   </p>
                 </div>
               </div>
 
-              <!-- Timeout row -->
               <div class="max-w-[calc(50%-7px)]">
                 <label for="router-timeout" class="block text-sm font-semibold text-(--pd-modal-text) mb-2">
                   Timeout
                 </label>
-                <NumberInput bind:value={timeout} minimum={1} maximum={3600} type="integer" aria-label="Timeout" />
+                <NumberInput bind:value={routerWizard.draft.timeout} minimum={1} maximum={3600} type="integer" aria-label="Timeout" />
                 <p class="text-xs text-(--pd-content-card-text) opacity-50 mt-1.5">
                   Maximum time (in seconds) before the request is cancelled.
                 </p>
               </div>
             </div>
+            {:else if currentStepId === 'signals'}
+              <SemanticRouterCreateStepSignals
+                bind:keywords={routerWizard.draft.keywords}
+                bind:decisions={routerWizard.draft.decisions} />
             {/if}
           </div>
 
@@ -157,10 +192,22 @@ function cancel(): void {
               Step {currentStepIndex + 1} of {WIZARD_STEPS.length}
             </span>
             <div class="flex flex-wrap items-center justify-end gap-3">
+              {#if currentStepIndex > 0}
+                <Button onclick={goBack}>Back</Button>
+              {/if}
               <Button onclick={cancel}>Cancel</Button>
-              <Button onclick={goNext} disabled={!canSave || creating} inProgress={creating}>
-                {isLastStep ? 'Create' : `Next: ${WIZARD_STEPS[currentStepIndex + 1]?.title}`}
-              </Button>
+              {#if currentStepId === 'basic'}
+                <Button type="secondary" disabled={!isBasicStepValid || creating} inProgress={creating} onclick={createRouter}>
+                  Skip signals and create router
+                </Button>
+              {/if}
+              {#if isLastStep}
+                <Button onclick={createRouter} disabled={creating} inProgress={creating}>
+                  Create
+                </Button>
+              {:else}
+                <Button disabled={!canProceed} onclick={goNext}>Continue</Button>
+              {/if}
             </div>
           </div>
 
