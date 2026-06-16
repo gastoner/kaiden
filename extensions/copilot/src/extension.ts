@@ -16,8 +16,10 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-import type { ExtensionContext } from '@openkaiden/api';
+import type { AgentWorkspaceContext, ExtensionContext } from '@openkaiden/api';
 import { agents } from '@openkaiden/api';
+
+export const COPILOT_SETTINGS_PATH = '.copilot/settings.json';
 
 export async function activate(extensionContext: ExtensionContext): Promise<void> {
   const disposable = agents.registerAgent({
@@ -39,13 +41,41 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
     command: 'copilot',
     acp: { args: ['--acp'] },
     tags: [],
-    configurationFiles: [],
     destinationSkillsFolder: '${HOME}/.copilot/skills',
+    configurationFiles: [
+      {
+        path: COPILOT_SETTINGS_PATH,
+        async read(): Promise<string> {
+          return '{}';
+        },
+      },
+    ],
     isSupportedModelType(type): boolean {
       return type.name !== 'vertexai';
     },
-    async preWorkspaceStart(): Promise<void> {
-      throw new Error('not implemented');
+    async preWorkspaceStart(context: AgentWorkspaceContext): Promise<void> {
+      const configFile = context.configurationFiles.find(f => f.path === COPILOT_SETTINGS_PATH);
+      if (!configFile) {
+        return;
+      }
+
+      const content = await configFile.read();
+      let config: Record<string, unknown>;
+      try {
+        const parsed: unknown = JSON.parse(content);
+        config =
+          typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+            ? (parsed as Record<string, unknown>)
+            : {};
+      } catch {
+        config = {};
+      }
+
+      const chat = (config.chat as Record<string, unknown> | undefined) ?? {};
+      chat.model = context.model.model.label;
+      config.chat = chat;
+
+      await configFile.update(JSON.stringify(config, undefined, 2));
     },
   });
   extensionContext.subscriptions.push(disposable);
