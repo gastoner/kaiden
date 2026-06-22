@@ -202,7 +202,7 @@ function cancel(): void {
                 </Button>
               {/if}
               {#if isLastStep}
-                <Button onclick={createRouter} disabled={creating} inProgress={creating}>
+                <Button onclick={createRouter} disabled={!isBasicStepValid || creating} inProgress={creating}>
                   Create
                 </Button>
               {:else}

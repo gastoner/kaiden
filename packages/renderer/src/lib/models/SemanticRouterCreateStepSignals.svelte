@@ -67,12 +67,26 @@ function removeChip(signalIndex: number, chipIndex: number): void {
 // --- Decision helpers ---
 
 function addDecision(): void {
+  const defaultConditions = keywordNames.length > 0 ? [{ type: 'keyword' as const, name: keywordNames[0] }] : [];
+
+  const defaultModelRefs =
+    allModels.length > 0
+      ? [
+          {
+            providerId: allModels[0].providerId,
+            connectionId: allModels[0].connectionId ?? '',
+            label: allModels[0].label,
+            useReasoning: false,
+          },
+        ]
+      : [];
+
   decisions = [
     ...decisions,
     {
       name: '',
       priority: 100,
-      rules: [{ operator: 'AND', conditions: [], modelRefs: [] }],
+      rules: [{ operator: 'AND', conditions: defaultConditions, modelRefs: defaultModelRefs }],
     },
   ];
 }
@@ -123,7 +137,7 @@ function selectModel(decIndex: number, model: CatalogModelInfo): void {
     const rule = d.rules[0];
     const ref = {
       providerId: model.providerId,
-      connectionId: model.connectionName ?? '',
+      connectionId: model.connectionId ?? '',
       label: model.label,
       useReasoning: rule.modelRefs[0]?.useReasoning ?? false,
     };
