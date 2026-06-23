@@ -32,10 +32,16 @@ let isBasicStepValid = $derived(
     routerWizard.draft.timeout <= 3600,
 );
 
-let canProceed = $derived.by(() => {
-  if (currentStepId === 'basic') return isBasicStepValid;
-  return true;
+let isSignalsStepValid = $derived.by(() => {
+  const { keywords, decisions } = routerWizard.draft;
+  const allSignalsNamed = keywords.every(k => k.name.trim().length > 0);
+  const allDecisionsNamed = decisions.every(d => d.name.trim().length > 0);
+  const allDecisionsHaveSignal = decisions.every(d => d.rules[0]?.conditions.length > 0);
+  const allDecisionsHaveModel = decisions.every(d => d.rules[0]?.modelRefs.length > 0);
+  return allSignalsNamed && allDecisionsNamed && allDecisionsHaveSignal && allDecisionsHaveModel;
 });
+
+let canProceed = $derived(currentStepId === 'basic' ? isBasicStepValid : isSignalsStepValid);
 
 function goBack(): void {
   if (routerWizard.draft.currentStepIndex > 0) {
@@ -196,13 +202,8 @@ function cancel(): void {
                 <Button onclick={goBack}>Back</Button>
               {/if}
               <Button onclick={cancel}>Cancel</Button>
-              {#if currentStepId === 'basic'}
-                <Button type="secondary" disabled={!isBasicStepValid || creating} inProgress={creating} onclick={createRouter}>
-                  Skip signals and create router
-                </Button>
-              {/if}
               {#if isLastStep}
-                <Button onclick={createRouter} disabled={!isBasicStepValid || creating} inProgress={creating}>
+                <Button onclick={createRouter} disabled={!isBasicStepValid || !isSignalsStepValid || creating} inProgress={creating}>
                   Create
                 </Button>
               {:else}

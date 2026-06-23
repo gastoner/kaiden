@@ -146,60 +146,6 @@ describe('step navigation', () => {
   });
 });
 
-describe('skip and create from step 1', () => {
-  test('skip button is disabled when name is empty', () => {
-    render(SemanticRouterCreate);
-
-    const skipBtn = screen.getByRole('button', { name: /Skip signals and create router/i });
-    expect(skipBtn).toBeDisabled();
-  });
-
-  test('skip button is enabled when name is provided', async () => {
-    render(SemanticRouterCreate);
-
-    const nameInput = screen.getByLabelText('Router name');
-    await fireEvent.input(nameInput, { target: { value: 'my-router' } });
-
-    const skipBtn = screen.getByRole('button', { name: /Skip signals and create router/i });
-    expect(skipBtn).toBeEnabled();
-  });
-
-  test('creates router with empty signals and decisions when skip is clicked', async () => {
-    render(SemanticRouterCreate);
-
-    const nameInput = screen.getByLabelText('Router name');
-    await fireEvent.input(nameInput, { target: { value: 'quick-router' } });
-
-    const skipBtn = screen.getByRole('button', { name: /Skip signals and create router/i });
-    await fireEvent.click(skipBtn);
-    await vi.advanceTimersToNextTimerAsync();
-
-    expect(window.createSemanticRouter).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'quick-router',
-        routing: { keywords: [], decisions: [] },
-      }),
-    );
-
-    const { handleNavigation } = await import('/@/navigation');
-    await waitFor(() => {
-      expect(handleNavigation).toHaveBeenCalledWith({ page: 'semantic-routers' });
-    });
-  });
-
-  test('skip button is not shown on step 2', async () => {
-    render(SemanticRouterCreate);
-
-    const nameInput = screen.getByLabelText('Router name');
-    await fireEvent.input(nameInput, { target: { value: 'my-router' } });
-
-    const nextBtn = screen.getByRole('button', { name: 'Continue' });
-    await fireEvent.click(nextBtn);
-
-    expect(screen.queryByRole('button', { name: /Skip signals/i })).not.toBeInTheDocument();
-  });
-});
-
 describe('create flow', () => {
   test('calls createSemanticRouter on final step', async () => {
     render(SemanticRouterCreate);
