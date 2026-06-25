@@ -134,34 +134,67 @@ describe('activate', () => {
       expect(written.other).toBe(true);
     });
 
+    test('sets model on chat object that has no model field', async () => {
+      await activate(extensionContextMock);
+      const agent = getRegisteredAgent();
+
+      const existingConfig = JSON.stringify({ chat: { temperature: 0.7 }, other: true });
+      const configFile = createConfigFile(existingConfig);
+      await agent.preWorkspaceStart(createContext([configFile], 'claude-sonnet'));
+
+      const written = JSON.parse(configFile.updateMock.mock.calls[0]![0] as string);
+      expect(written.chat.model).toBe('claude-sonnet');
+      expect(written.chat.temperature).toBe(0.7);
+      expect(written.other).toBe(true);
+    });
+
+    test('accepts chat object without model field', async () => {
+      await activate(extensionContextMock);
+      const agent = getRegisteredAgent();
+
+      const existingConfig = JSON.stringify({ chat: { temperature: 0.7 }, other: true });
+      const configFile = createConfigFile(existingConfig);
+      await agent.preWorkspaceStart(createContext([configFile], 'claude-sonnet'));
+
+      const written = JSON.parse(configFile.updateMock.mock.calls[0]![0] as string);
+      expect(written.chat.model).toBe('claude-sonnet');
+      expect(written.chat.temperature).toBe(0.7);
+      expect(written.other).toBe(true);
+    });
+
     test.each([
       'null',
       '"a string"',
       '123',
       'true',
       '[1, 2]',
-    ])('falls back to empty config when parsed JSON is non-object: %s', async (payload: string) => {
+    ])('rejects non-object JSON: %s', async (payload: string) => {
       await activate(extensionContextMock);
       const agent = getRegisteredAgent();
 
       const configFile = createConfigFile(payload);
-      await agent.preWorkspaceStart(createContext([configFile]));
-
-      expect(configFile.updateMock).toHaveBeenCalledOnce();
-      const written = JSON.parse(configFile.updateMock.mock.calls[0]![0] as string);
-      expect(written.chat.model).toBe('gpt-4o');
+      await expect(agent.preWorkspaceStart(createContext([configFile]))).rejects.toThrow();
     });
 
-    test('handles invalid JSON by starting with empty config', async () => {
+    test.each([
+      JSON.stringify({ chat: 'bad-shape' }),
+      JSON.stringify({ chat: null }),
+      JSON.stringify({ chat: [1, 2] }),
+      JSON.stringify({ chat: 123 }),
+    ])('rejects malformed chat field: %s', async (payload: string) => {
+      await activate(extensionContextMock);
+      const agent = getRegisteredAgent();
+
+      const configFile = createConfigFile(payload);
+      await expect(agent.preWorkspaceStart(createContext([configFile]))).rejects.toThrow();
+    });
+
+    test('rejects invalid JSON', async () => {
       await activate(extensionContextMock);
       const agent = getRegisteredAgent();
 
       const configFile = createConfigFile('not valid json');
-      await agent.preWorkspaceStart(createContext([configFile]));
-
-      expect(configFile.updateMock).toHaveBeenCalledOnce();
-      const written = JSON.parse(configFile.updateMock.mock.calls[0]![0] as string);
-      expect(written.chat.model).toBe('gpt-4o');
+      await expect(agent.preWorkspaceStart(createContext([configFile]))).rejects.toThrow();
     });
 
     test('does nothing when config file is not in context', async () => {

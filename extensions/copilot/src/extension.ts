@@ -18,6 +18,28 @@
 
 import type { AgentWorkspaceContext, ExtensionContext } from '@openkaiden/api';
 import { agents } from '@openkaiden/api';
+import { z } from 'zod';
+
+const CopilotSettingsSchema = z.looseObject({
+  chat: z.looseObject({ model: z.string().optional() }).optional(),
+});
+
+const CopilotSettingsCodec = z.codec(z.string(), CopilotSettingsSchema, {
+  decode: (jsonString, ctx) => {
+    try {
+      return JSON.parse(jsonString);
+    } catch (err: unknown) {
+      ctx.issues.push({
+        code: 'invalid_format',
+        format: 'json',
+        input: jsonString,
+        message: err instanceof Error ? err.message : 'Invalid JSON',
+      });
+      return z.NEVER;
+    }
+  },
+  encode: value => JSON.stringify(value, undefined, 2),
+});
 
 export const COPILOT_SETTINGS_PATH = '.copilot/settings.json';
 
@@ -59,23 +81,10 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
         return;
       }
 
-      const content = await configFile.read();
-      let config: Record<string, unknown>;
-      try {
-        const parsed: unknown = JSON.parse(content);
-        config =
-          typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
-            ? (parsed as Record<string, unknown>)
-            : {};
-      } catch {
-        config = {};
-      }
+      const config = CopilotSettingsCodec.decode(await configFile.read());
+      config.chat = { ...config.chat, model: context.model.model.label };
 
-      const chat = (config.chat as Record<string, unknown> | undefined) ?? {};
-      chat.model = context.model.model.label;
-      config.chat = chat;
-
-      await configFile.update(JSON.stringify(config, undefined, 2));
+      await configFile.update(CopilotSettingsCodec.encode(config));
     },
   });
   extensionContext.subscriptions.push(disposable);
