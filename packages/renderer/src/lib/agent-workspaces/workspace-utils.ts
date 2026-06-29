@@ -17,6 +17,7 @@
  ***********************************************************************/
 
 import type { SandboxInfoWithGateway } from '/@/stores/openshell-sandboxes';
+import { AGENT_LABEL } from '/@api/openshell-gateway-info';
 
 export const ACTIVE_GROUP_LABEL = 'Active';
 export const STOPPED_GROUP_LABEL = 'Stopped';
@@ -30,5 +31,5 @@ export function getReferenceTime(sandbox: SandboxInfoWithGateway): string | unde
 }
 
 export function getAgentId(sandbox?: SandboxInfoWithGateway): string | undefined {
-  return sandbox?.labels?.['ai.openkaiden.kaiden.agent'];
+  return sandbox?.labels?.[AGENT_LABEL];
 }

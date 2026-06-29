@@ -43,6 +43,7 @@ export type SandboxInfo = z.output<typeof SandboxInfoSchema> & {
 };
 
 export const WORKSPACE_LABEL = 'ai.openkaiden.kaiden.workspace';
+export const AGENT_LABEL = 'ai.openkaiden.kaiden.agent';
 
 export function decodeWorkspaceLabels(labels: Record<string, string>): string | undefined {
   let encoded: string;

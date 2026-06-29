@@ -48,7 +48,7 @@ import { ApiSenderType } from '/@api/api-sender/api-sender-type.js';
 import type { IConfigurationNode } from '/@api/configuration/models.js';
 import { IConfigurationRegistry } from '/@api/configuration/models.js';
 import type { GatewaySandboxes } from '/@api/openshell-gateway-info.js';
-import { decodeWorkspaceLabels, WORKSPACE_LABEL } from '/@api/openshell-gateway-info.js';
+import { AGENT_LABEL, decodeWorkspaceLabels, WORKSPACE_LABEL } from '/@api/openshell-gateway-info.js';
 import type { SecretValue } from '/@api/secret-info.js';
 
 const HOME_VARIABLE = '${HOME}';
@@ -193,7 +193,7 @@ export class AgentWorkspaceManager implements Disposable {
       name: sandboxName,
       providers: options.secrets,
       env: env && Object.keys(env).length > 0 ? env : undefined,
-      labels: encodeWorkspaceLabels(options.sourcePath),
+      labels: { ...encodeWorkspaceLabels(options.sourcePath), [AGENT_LABEL]: options.agent },
       uploads: uploads.length > 0 ? uploads : undefined,
       noTty: true,
       command: ['true'],

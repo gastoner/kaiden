@@ -46,7 +46,7 @@ import type { AgentWorkspaceCreateOptions } from '/@api/agent-workspace-info.js'
 import type { ApiSenderType } from '/@api/api-sender/api-sender-type.js';
 import type { IConfigurationRegistry } from '/@api/configuration/models.js';
 import type { GatewaySandboxes } from '/@api/openshell-gateway-info.js';
-import { decodeWorkspaceLabels } from '/@api/openshell-gateway-info.js';
+import { AGENT_LABEL, decodeWorkspaceLabels } from '/@api/openshell-gateway-info.js';
 import type { TaskState, TaskStatus } from '/@api/taskInfo.js';
 
 import { AgentWorkspaceManager, encodeWorkspaceLabels } from './agent-workspace-manager.js';
@@ -288,14 +288,14 @@ describe('create – OpenShell mode', () => {
     vi.mocked(readFile).mockRejectedValue(mockEnoent());
   });
 
-  test('calls openshellCli.createSandbox with name, providers, and workspace label', async () => {
+  test('calls openshellCli.createSandbox with name, providers, workspace label, and agent label', async () => {
     const options = { ...defaultOptions, secrets: ['my-secret'] };
     await manager.create(options);
 
     expect(openshellCli.createSandbox).toHaveBeenCalledWith({
       name: 'my-sandbox',
       providers: ['my-secret'],
-      labels: encodeWorkspaceLabels('/tmp/my-project'),
+      labels: { ...encodeWorkspaceLabels('/tmp/my-project'), [AGENT_LABEL]: 'claude' },
       noTty: true,
       command: ['true'],
     });
